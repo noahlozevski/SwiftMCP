@@ -24,18 +24,47 @@ public struct ListPromptsResult: MCPResponse {
     public let nextCursor: String?
     public let metadata: [String: AnyCodable]?
 
+    public init(
+        prompts: [Prompt],
+        nextCursor: String? = nil,
+        metadata: [String: AnyCodable]? = nil
+    ) {
+        self.prompts = prompts
+        self.nextCursor = nextCursor
+        self.metadata = metadata
+    }
 }
 
 public struct Prompt: Codable, Sendable {
     public let name: String
     public let description: String?
     public let arguments: [PromptArgument]?
+
+    public init(
+        name: String,
+        description: String? = nil,
+        arguments: [PromptArgument]? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.arguments = arguments
+    }
 }
 
 public struct PromptArgument: Codable, Sendable {
     public let name: String
     public let description: String?
     public let required: Bool?
+
+    public init(
+        name: String,
+        description: String? = nil,
+        required: Bool? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.required = required
+    }
 }
 
 public struct PromptMessage: Codable, Sendable {

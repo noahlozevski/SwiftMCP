@@ -65,7 +65,7 @@ struct StdioTransportTests {
     }
 
     // Wait for command output
-    try await Task.sleep(for: .milliseconds(1000))
+    try await Task.sleep(for: .milliseconds(2000))
     await transport.stop()
     try await messagesTask.value
 
