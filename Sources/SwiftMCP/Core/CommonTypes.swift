@@ -28,7 +28,7 @@ public enum RequestID: Codable, Hashable, Sendable {
 }
 
 /// AnyCodable helper for dynamic JSON fields.
-public struct AnyCodable: Codable {
+public struct AnyCodable: Codable, @unchecked Sendable {
     public let value: Any
 
     public init(_ value: Any) {
@@ -104,13 +104,13 @@ func decodeParams<T: Decodable>(
         let data = try? JSONEncoder().encode([String: AnyCodable]())
         return data.flatMap { try? JSONDecoder().decode(T.self, from: $0) }
     }
-    
+
     // Use JSONEncoder to encode the dictionary
     guard let data = try? JSONEncoder().encode(dict) else {
         print("Failed to encode params using JSONEncoder.")
         return nil
     }
-    
+
     // Decode the data into the desired type
     do {
         let decodedParams = try JSONDecoder().decode(T.self, from: data)

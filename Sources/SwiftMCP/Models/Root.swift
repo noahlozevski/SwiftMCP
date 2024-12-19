@@ -1,7 +1,7 @@
 import Foundation
 
 /// Root definition
-public struct Root: Codable {
+public struct Root: Codable, Sendable {
     public let uri: String
     public let name: String?
 }

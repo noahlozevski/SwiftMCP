@@ -111,6 +111,7 @@ public struct TransportRetryPolicy {
 
 /// A transport connection state
 public enum TransportState {
+
     /// Transport is disconnected
     case disconnected
 
@@ -127,8 +128,46 @@ public enum TransportState {
     case failed(Error)
 }
 
+extension TransportState: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self {
+        case .disconnected: return "disconnected"
+        case .connecting: return "connecting"
+        case .connected: return "connected"
+        case .suspended: return "suspended"
+        case .failed(let error): return "failed: \(error)"
+        }
+    }
+
+    public var debugDescription: String {
+        switch self {
+        case .disconnected: return "Transport is disconnected"
+        case .connecting: return "Transport is connecting"
+        case .connected: return "Transport is connected"
+        case .suspended: return "Transport is suspended"
+        case .failed(let error): return "Transport has failed: \(error)"
+        }
+    }
+}
+
+extension TransportState: Equatable {
+    public static func == (lhs: TransportState, rhs: TransportState) -> Bool {
+        switch (lhs, rhs) {
+        case (.disconnected, .disconnected),
+            (.connecting, .connecting),
+            (.connected, .connected),
+            (.failed, .failed),
+            (.suspended, .suspended):
+            return true
+        default:
+            return false
+        }
+    }
+
+}
+
 /// Core transport errors
-public enum TransportError: Error {
+public enum TransportError: Error, CustomStringConvertible {
     /// Timeout waiting for operation
     case timeout(operation: String)
 
@@ -146,51 +185,21 @@ public enum TransportError: Error {
 
     /// Message exceeds size limit
     case messageTooLarge(Int)
-}
 
-/// Protocol defining a MCP transport implementation
-public protocol MCPTransport: Actor {
-    /// Current state of the transport
-    var state: TransportState { get }
-
-    /// Transport configuration
-    var configuration: TransportConfiguration { get }
-
-    /// Called when state changes
-    var onStateChange: ((TransportState) -> Void)? { get set }
-
-    /// Called when message is received
-    var onMessage: ((Data) -> Void)? { get set }
-
-    /// Start the transport
-    func start() async throws
-
-    /// Stop the transport
-    func stop() async
-
-    /// Temporarily suspend the transport
-    func suspend() async
-
-    /// Resume a suspended transport
-    func resume() async throws
-
-    /// Send a message
-    func send(_ data: Data) async throws
-
-    /// Send a message with custom timeout
-    func send(_ data: Data, timeout: TimeInterval?) async throws
-}
-
-extension MCPTransport {
-    /// Default implementation for send with timeout
-    public func send(_ data: Data, timeout: TimeInterval?) async throws {
-        if data.count > configuration.maxMessageSize {
-            throw TransportError.messageTooLarge(data.count)
-        }
-
-        let timeout = timeout ?? configuration.sendTimeout
-        try await with(timeout: .microseconds(Int64(timeout * 1_000_000))) { [weak self] in
-            try await self?.send(data)
+    public var description: String {
+        switch self {
+        case .timeout(let operation):
+            return "Timeout waiting for operation: \(operation)"
+        case .invalidMessage(let message):
+            return "Invalid message format: \(message)"
+        case .connectionFailed(let error):
+            return "Connection failed: \(error)"
+        case .operationFailed(let error):
+            return "Operation failed: \(error)"
+        case .invalidState(let message):
+            return "Invalid state: \(message)"
+        case .messageTooLarge(let size):
+            return "Message exceeds size limit: \(size)"
         }
     }
 }
