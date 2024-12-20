@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Transport implementation using stdio for process-based communication.
 /// This transport is designed for long-running MCP servers launched via command line.
@@ -12,6 +13,11 @@ public actor StdioTransport: MCPTransport {
   private let errorPipe = Pipe()
   private var messagesContinuation: AsyncThrowingStream<Data, Error>.Continuation?
   private var processTask: Task<Void, Never>?
+  private let logger = Logger(subsystem: "SwiftMCP", category: "StdioTransport")
+
+  public var isRunning: Bool {
+    process.isRunning
+  }
 
   /// Initialize a stdio transport for a command-line MCP server
   /// - Parameters:
@@ -35,7 +41,6 @@ public actor StdioTransport: MCPTransport {
     // Setup environment
     var processEnv = ProcessInfo.processInfo.environment
     // Merge any custom environment variables
-    
     environment?.forEach { processEnv[$0] = $1 }
 
     // Ensure PATH includes common tool locations for npm/npx
@@ -89,20 +94,31 @@ public actor StdioTransport: MCPTransport {
 
   public func start() async throws {
     guard state == .disconnected else {
-      throw TransportError.invalidState("Transport already started")
+      logger.warning("Transport already connected")
+      return
     }
 
     self.state = .connecting
 
-    // Start the process with timeout
-    try await with(timeout: .seconds(configuration.connectTimeout)) {
-      try self.process.run()
+    try process.run()
 
-      // Start error monitoring
-      await self.monitorErrors()
-
-    }
     self.state = .connected
+
+    Task {
+      await withTaskGroup(of: Void.self) { group in
+        group.addTask {
+          await self.monitorStdErr()
+        }
+
+        group.addTask {
+          await self.readMessages()
+        }
+
+        group.addTask {
+          self.process.waitUntilExit()
+        }
+      }
+    }
   }
 
   public func stop() async {
@@ -122,65 +138,65 @@ public actor StdioTransport: MCPTransport {
       throw TransportError.messageTooLarge(data.count)
     }
 
-    // Send with timeout
-    try await with(timeout: .seconds(timeout ?? configuration.sendTimeout)) {
-      try self.inputPipe.fileHandleForWriting.write(contentsOf: data)
-    }
+    var messageData = data
+
+    logger.info("Sending message: \(String(data: data, encoding: .utf8) ?? "", privacy: .public)")
+    messageData.append(0x0A)  // Append newline
+
+    inputPipe.fileHandleForWriting.write(messageData)
   }
 
   /// Monitor process stderr for errors
-  private func monitorErrors() {
-    Task {
-      do {
-        let handle = errorPipe.fileHandleForReading
-        for try await line in handle.bytes.lines {
-          // Log but don't fail - some MCP servers use stderr for logging
-          print("StdioTransport stderr: \(line)")
-        }
-      } catch {
-        // Only fail if process terminated
-        if process.isRunning == false {
-          state = .failed(error)
-          messagesContinuation?.finish(throwing: error)
-        }
-      }
+  private func monitorStdErr() async {
+    for try await line in errorPipe.bytes.lines {
+      // Log but don't fail - some MCP servers use stderr for logging
+      logger.info("[SERVER] \(line)")
     }
   }
 
   /// Read messages from process stdout
   private func readMessages() async {
-    print("Readig messages")
-    let handle = outputPipe.fileHandleForReading
+    logger.debug("Beginning read loop")
 
-    do {
-      // Use AsyncBytes for efficient streaming
-      for try await data in handle.bytes.lines {
-        print("Received data: \(data)")
-        guard !Task.isCancelled, let data = data.data(using: .utf8) else {
-          break
-        }
-        messagesContinuation?.yield(data)
+    for try await data in outputPipe.bytes.lines {
+      guard !Task.isCancelled, let data = data.data(using: .utf8) else {
+        break
       }
-      messagesContinuation?.finish()
-    } catch {
-      state = .failed(error)
-      messagesContinuation?.finish(throwing: error)
+      messagesContinuation?.yield(data)
+    }
+    messagesContinuation?.finish()
+  }
+}
+
+extension Pipe {
+  struct AsyncBytes: AsyncSequence {
+    typealias Element = UInt8
+
+    let pipe: Pipe
+
+    func makeAsyncIterator() -> AsyncStream<Element>.Iterator {
+      AsyncStream { continuation in
+        pipe.fileHandleForReading.readabilityHandler = { @Sendable handle in
+          let data = handle.availableData
+
+          guard !data.isEmpty else {
+            continuation.finish()
+            return
+          }
+
+          for byte in data {
+            continuation.yield(byte)
+          }
+        }
+
+        continuation.onTermination = { _ in
+          pipe.fileHandleForReading.readabilityHandler = nil
+        }
+      }.makeAsyncIterator()
     }
   }
 
-  /// Helper to find executables in PATH
-  private static func findExecutable(_ command: String) -> String? {
-    guard let path = ProcessInfo.processInfo.environment["PATH"] else {
-      return nil
-    }
-
-    let paths = path.split(separator: ":")
-    for path in paths {
-      let fullPath = "\(path)/\(command)"
-      if FileManager.default.isExecutableFile(atPath: fullPath) {
-        return fullPath
-      }
-    }
-    return nil
+  var bytes: AsyncBytes {
+    AsyncBytes(pipe: self)
   }
 }
