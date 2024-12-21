@@ -8,8 +8,8 @@ public protocol MCPEndpoint: Actor {
   /// Stream of notifications from this endpoint
   var notifications: AsyncStream<MCPNotification> { get }
 
-  /// Start the endpoint
-  func start() async throws
+  /// Start the endpoint with the given transport
+  func start(_ transport: MCPTransport) async throws
 
   /// Stop the endpoint
   func stop() async

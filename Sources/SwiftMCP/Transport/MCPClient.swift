@@ -7,42 +7,46 @@ public actor MCPClient: MCPEndpoint {
   public private(set) var state: MCPEndpointState = .disconnected
   public let notifications: AsyncStream<MCPNotification>
 
-  private let transport: any MCPTransport
-  private let configuration: TransportConfiguration
+  private var transport: (any MCPTransport)?
   private var requestHandlers: [RequestID: ResponseHandler] = [:]
   private var messageProcessingTask: Task<Void, Error>?
   private let notificationsContinuation: AsyncStream<MCPNotification>.Continuation
+  private let clientInfo: Implementation
+  private let clientCapabilities: ClientCapabilities
 
   // MARK: - Initialization
 
   public init(
-    transport: any MCPTransport,
-    configuration: TransportConfiguration = .default,
+    clientInfo: Implementation,
     capabilities: ClientCapabilities = .init()
   ) {
-    self.transport = transport
-    self.configuration = configuration
-
     // Setup notifications stream
     var continuation: AsyncStream<MCPNotification>.Continuation!
     self.notifications = AsyncStream { continuation = $0 }
     self.notificationsContinuation = continuation
+    self.clientCapabilities = capabilities
+    self.clientInfo = clientInfo
   }
 
   // MARK: - Connection Management
 
-  public func start() async throws {
-    guard case .disconnected = state else {
-      return
+  public func start(_ transport: any MCPTransport) async throws {
+    if case .running = state {
+      await stop()
     }
 
+    self.transport = transport
     state = .connecting
 
     // Start message processing
     messageProcessingTask = Task {
+      guard let transport = self.transport else {
+        throw MCPError.internalError("Transport not available")
+      }
       try await transport.start()
       do {
-        for try await data in await transport.messages() {
+        let messageStream = await transport.messages()
+        for try await data in messageStream {
           if Task.isCancelled { break }
           try await processIncomingMessage(data)
         }
@@ -64,7 +68,7 @@ public actor MCPClient: MCPEndpoint {
   public func stop() async {
     messageProcessingTask?.cancel()
     messageProcessingTask = nil
-    await transport.stop()
+    await transport?.stop()
 
     // Cancel all pending requests
     let error = MCPError.internalError("Client stopped")
@@ -93,6 +97,9 @@ public actor MCPClient: MCPEndpoint {
 
   /// Send a request without state validation - used only for initialization
   private func sendRequest<R: MCPRequest>(_ request: R) async throws -> R.Response {
+    guard let transport else {
+      throw MCPError.internalError("Transport not available")
+    }
     // Create message with unique ID
     let requestId = RequestID.string(UUID().uuidString)
     let message = JSONRPCMessage<R>.request(id: requestId, request: request)
@@ -104,9 +111,8 @@ public actor MCPClient: MCPEndpoint {
 
       Task {
         do {
-          // Encode and send message
           let data = try JSONEncoder().encode(message)
-          try await transport.send(data, timeout: configuration.sendTimeout)
+          try await transport.send(data)
         } catch {
           // Clean up handler on send failure
           requestHandlers.removeValue(forKey: requestId)
@@ -129,21 +135,23 @@ public actor MCPClient: MCPEndpoint {
     }
 
     // Try each response handler
-    for (id, handler) in requestHandlers {
-      if try handler.handle(data) {
-        requestHandlers.removeValue(forKey: id)
-        return
-      }
+    for (id, handler) in requestHandlers where try handler.handle(data) {
+      requestHandlers.removeValue(forKey: id)
+      return
     }
 
     // Ignore unmatched messages - they might be for cancelled requests
   }
 
   private func performInitialization() async throws -> ServerCapabilities {
+    guard let transport else {
+      throw MCPError.internalError("Transport not available")
+    }
+
     let request = InitializeRequest(
       params: .init(
-        capabilities: ClientCapabilities(),
-        clientInfo: Implementation(name: "SwiftMCP", version: "1.0.0"),
+        capabilities: clientCapabilities,
+        clientInfo: clientInfo,
         protocolVersion: MCPVersion.currentVersion
       ))
 

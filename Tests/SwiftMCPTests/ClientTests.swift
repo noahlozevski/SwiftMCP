@@ -112,13 +112,14 @@ actor MockTransport: MCPTransport {
 
 @Suite("MCPClient Tests")
 struct MCPClientTests {
+  private var client = MCPClient(clientInfo: .init(name: "test", version: "1.0"))
+
   @Test("Successfully initializes and connects")
   func testInitialization() async throws {
     let transport = MockTransport()
     await transport.queueInitSuccess()
 
-    let client = MCPClient(transport: transport)
-    try await client.start()
+    try await client.start(transport)
 
     // Verify state transitions
     let finalState = await client.state
@@ -142,10 +143,8 @@ struct MCPClientTests {
     let transport = MockTransport()
     await transport.queueError(MCPError.internalError("Init failed"))
 
-    let client = MCPClient(transport: transport)
-
     do {
-      try await client.start()
+      try await client.start(transport)
       throw MCPError.internalError("Expected failure")
     } catch {
       let finalState = await client.state
@@ -182,8 +181,7 @@ struct MCPClientTests {
       return try JSONEncoder().encode(response)
     }
 
-    let client = MCPClient(transport: transport)
-    try await client.start()
+    try await client.start(transport)
 
     let result = try await client.send(ListPromptsRequest())
     #expect(result.prompts.isEmpty)
@@ -194,8 +192,7 @@ struct MCPClientTests {
     let transport = MockTransport()
     await transport.queueInitSuccess()
 
-    let client = MCPClient(transport: transport)
-    try await client.start()
+    try await client.start(transport)
 
     var receivedNotifications: [MCPNotification] = []
     let notificationTask = Task {
@@ -237,8 +234,7 @@ struct MCPClientTests {
       return try JSONEncoder().encode(response)
     }
 
-    let client = MCPClient(transport: transport)
-    try await client.start()
+    try await client.start(transport)
 
     do {
       _ = try await client.send(ListPromptsRequest())
@@ -254,8 +250,7 @@ struct MCPClientTests {
     let transport = MockTransport()
     await transport.queueInitSuccess()
 
-    let client = MCPClient(transport: transport)
-    try await client.start()
+    try await client.start(transport)
     await client.stop()
 
     let finalState = await client.state

@@ -82,6 +82,20 @@ extension ClientCapabilities: Equatable {
     }
 }
 
+extension ClientCapabilities: CustomStringConvertible {
+    public var description: String {
+        var desc = "ClientCapabilities("
+        if let roots = roots {
+            desc += "\nroots: \(roots),"
+        }
+        if let sampling = sampling {
+            desc += "\nsampling: \(sampling),"
+        }
+
+        return desc + ")"
+    }
+}
+
 public struct Implementation: Codable, Sendable {
     public let name: String
     public let version: String
@@ -140,6 +154,23 @@ public struct ServerCapabilities: Codable, Sendable {
     }
 }
 
+extension ServerCapabilities: CustomStringConvertible {
+    public var description: String {
+        var desc = "ServerCapabilities("
+        if let prompts = prompts {
+            desc += "prompts: \(prompts), "
+        }
+        if let resources = resources {
+            desc += "resources: \(resources), "
+        }
+        if let tools = tools {
+            desc += "tools: \(tools), "
+        }
+        desc += ")"
+        return desc
+    }
+}
+
 extension ServerCapabilities: Equatable {
     public static func == (lhs: ServerCapabilities, rhs: ServerCapabilities) -> Bool {
         // TODO: Full comparison
@@ -147,4 +178,3 @@ extension ServerCapabilities: Equatable {
             && (lhs.tools == rhs.tools)
     }
 }
-

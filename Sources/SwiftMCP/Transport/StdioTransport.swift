@@ -1,6 +1,22 @@
 import Foundation
 import os.log
 
+public struct StdioTransportOptions {
+  public let command: String
+  public let arguments: [String]
+  public let environment: [String: String]?
+
+  public init(
+    command: String,
+    arguments: [String] = [],
+    environment: [String: String]? = nil
+  ) {
+    self.command = command
+    self.arguments = arguments
+    self.environment = environment
+  }
+}
+
 /// Transport implementation using stdio for process-based communication.
 /// This transport is designed for long-running MCP servers launched via command line.
 public actor StdioTransport: MCPTransport {
@@ -26,9 +42,7 @@ public actor StdioTransport: MCPTransport {
   ///   - environment: Optional environment variables to set
   ///   - configuration: Transport configuration
   public init(
-    command: String,
-    arguments: [String] = [],
-    environment: [String: String]? = nil,
+    options: StdioTransportOptions,
     configuration: TransportConfiguration = .default
   ) {
     self.configuration = configuration
@@ -36,12 +50,12 @@ public actor StdioTransport: MCPTransport {
 
     // Setup executable path and arguments
     self.process.executableURL = URL(fileURLWithPath: "/usr/bin/env")  // Use /usr/bin/env to locate the command in PATH
-    self.process.arguments = [command] + arguments
+    self.process.arguments = [options.command] + options.arguments
 
     // Setup environment
     var processEnv = ProcessInfo.processInfo.environment
     // Merge any custom environment variables
-    environment?.forEach { processEnv[$0] = $1 }
+    options.environment?.forEach { processEnv[$0] = $1 }
 
     // Ensure PATH includes common tool locations for npm/npx
     if var path = processEnv["PATH"] {
@@ -140,7 +154,7 @@ public actor StdioTransport: MCPTransport {
 
     var messageData = data
 
-    logger.info("Sending message: \(String(data: data, encoding: .utf8) ?? "", privacy: .public)")
+    logger.debug("Sending message: \(String(data: data, encoding: .utf8) ?? "", privacy: .public)")
     messageData.append(0x0A)  // Append newline
 
     inputPipe.fileHandleForWriting.write(messageData)
@@ -156,8 +170,6 @@ public actor StdioTransport: MCPTransport {
 
   /// Read messages from process stdout
   private func readMessages() async {
-    logger.debug("Beginning read loop")
-
     for try await data in outputPipe.bytes.lines {
       guard !Task.isCancelled, let data = data.data(using: .utf8) else {
         break

@@ -10,9 +10,11 @@ struct StdioTransportTests {
   @Test("Creates transport with proper environment setup")
   func testEnvironmentSetup() async throws {
     let transport = StdioTransport(
-      command: "echo",
-      arguments: ["test"],
-      environment: ["TEST_VAR": "value"]
+      options: .init(
+        command: "echo",
+        arguments: ["test"],
+        environment: ["TEST_VAR": "value"]
+      )
     )
 
     let processEnv = (await transport.process).environment
@@ -29,8 +31,10 @@ struct StdioTransportTests {
   @Test("Handles echo command with auto-start from messages")
   func testEchoCommand() async throws {
     let transport = StdioTransport(
-      command: "echo",
-      arguments: ["test"]
+      options: .init(
+        command: "echo",
+        arguments: ["test"]
+      )
     )
 
     var messages = [Data]()
@@ -53,8 +57,10 @@ struct StdioTransportTests {
   @Test("Handles npx command execution")
   func testNpxCommand() async throws {
     let transport = StdioTransport(
-      command: "npx",
-      arguments: ["-y", "cowsay", "test"]
+      options: .init(
+        command: "npx",
+        arguments: ["-y", "cowsay", "test"]
+      )
     )
 
     var output = Data()
