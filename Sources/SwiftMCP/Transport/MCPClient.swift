@@ -1,10 +1,21 @@
 import Foundation
 
 /// A client implementation of the Model Context Protocol
-public actor MCPClient: MCPEndpoint {
+public actor MCPClient: MCPEndpointProtocol {
+  public typealias SessionInfo = InitializeResult
+
+  public struct Configuration {
+    public let clientInfo: Implementation
+    public let capabilities: ClientCapabilities
+
+    public init(clientInfo: Implementation, capabilities: ClientCapabilities) {
+      self.clientInfo = clientInfo
+      self.capabilities = capabilities
+    }
+  }
   // MARK: - Properties
 
-  public private(set) var state: MCPEndpointState = .disconnected
+  public private(set) var state: MCPEndpointState<SessionInfo> = .disconnected
   public let notifications: AsyncStream<MCPNotification>
 
   private var transport: (any MCPTransport)?
@@ -15,6 +26,9 @@ public actor MCPClient: MCPEndpoint {
   private let clientCapabilities: ClientCapabilities
 
   // MARK: - Initialization
+  init(configuration: Configuration) {
+    self.init(clientInfo: configuration.clientInfo, capabilities: configuration.capabilities)
+  }
 
   public init(
     clientInfo: Implementation,
@@ -83,12 +97,12 @@ public actor MCPClient: MCPEndpoint {
   // MARK: - Request Handling
 
   public func send<R: MCPRequest>(_ request: R) async throws -> R.Response {
-    guard case .running(let capabilities) = state else {
+    guard case .running(let session) = state else {
       throw MCPError.internalError("Client must be running to send requests")
     }
 
     // Validate capabilities for this request type
-    try validateCapabilities(capabilities, for: request)
+    try validateCapabilities(session.capabilities, for: request)
 
     return try await sendRequest(request)
   }
@@ -134,7 +148,7 @@ public actor MCPClient: MCPEndpoint {
       }
     }
 
-    // Try each response handler
+    // TODO: better way to do this. but i'm tired of codables.
     for (id, handler) in requestHandlers where try handler.handle(data) {
       requestHandlers.removeValue(forKey: id)
       return
@@ -143,7 +157,7 @@ public actor MCPClient: MCPEndpoint {
     // Ignore unmatched messages - they might be for cancelled requests
   }
 
-  private func performInitialization() async throws -> ServerCapabilities {
+  private func performInitialization() async throws -> SessionInfo {
     guard let transport else {
       throw MCPError.internalError("Transport not available")
     }
@@ -155,10 +169,11 @@ public actor MCPClient: MCPEndpoint {
         protocolVersion: MCPVersion.currentVersion
       ))
 
-    let response = try await sendRequest(request)  // Use sendRequest directly, bypassing state validation
+    // Initialize request needs to be sent without validation
+    let response = try await sendRequest(request)
 
     // Validate protocol version
-    guard MCPVersion.supportedVersions.contains(response.protocolVersion) else {
+    guard MCPVersion.isSupported(response.protocolVersion) else {
       throw MCPError.invalidRequest(
         "Server version \(response.protocolVersion) not supported")
     }
@@ -169,11 +184,12 @@ public actor MCPClient: MCPEndpoint {
     let data = try JSONEncoder().encode(message)
     try await transport.send(data)
 
-    return response.capabilities
+    return response
   }
 
   private func validateCapabilities(
-    _ capabilities: ServerCapabilities, for request: any MCPRequest
+    _ capabilities: ServerCapabilities,
+    for request: any MCPRequest
   ) throws {
     switch request {
     case is ListPromptsRequest:

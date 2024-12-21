@@ -1,41 +1,6 @@
 import Foundation
 
-public struct ListPromptsRequest: MCPRequest {
-    public static let method = "prompts/list"
-    public typealias Response = ListPromptsResult
-
-    public struct Params: Codable, Sendable {
-        public let cursor: String?
-    }
-
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
-
-    public init(cursor: String? = nil) {
-        self.internalParams = Params(cursor: cursor)
-    }
-}
-
-public struct ListPromptsResult: MCPResponse {
-    public typealias Request = ListPromptsRequest
-
-    public let prompts: [Prompt]
-    public let nextCursor: String?
-    public let metadata: [String: AnyCodable]?
-
-    public init(
-        prompts: [Prompt],
-        nextCursor: String? = nil,
-        metadata: [String: AnyCodable]? = nil
-    ) {
-        self.prompts = prompts
-        self.nextCursor = nextCursor
-        self.metadata = metadata
-    }
-}
-
-public struct Prompt: Codable, Sendable {
+public struct MCPPrompt: Codable, Sendable {
     public let name: String
     public let description: String?
     public let arguments: [PromptArgument]?
@@ -107,6 +72,40 @@ public struct PromptMessage: Codable, Sendable {
             case .resource(let resourceContent): try resourceContent.encode(to: encoder)
             }
         }
+    }
+}
+public struct ListPromptsRequest: MCPRequest {
+    public static let method = "prompts/list"
+    public typealias Response = ListPromptsResult
+
+    public struct Params: Codable, Sendable {
+        public let cursor: String?
+    }
+
+    public var params: Encodable? { internalParams }
+
+    private let internalParams: Params
+
+    public init(cursor: String? = nil) {
+        self.internalParams = Params(cursor: cursor)
+    }
+}
+
+public struct ListPromptsResult: MCPResponse {
+    public typealias Request = ListPromptsRequest
+
+    public let prompts: [MCPPrompt]
+    public let nextCursor: String?
+    public let metadata: [String: AnyCodable]?
+
+    public init(
+        prompts: [MCPPrompt],
+        nextCursor: String? = nil,
+        metadata: [String: AnyCodable]? = nil
+    ) {
+        self.prompts = prompts
+        self.nextCursor = nextCursor
+        self.metadata = metadata
     }
 }
 

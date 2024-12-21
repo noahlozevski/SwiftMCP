@@ -37,12 +37,30 @@ public actor StdioTransport: MCPTransport {
 
   /// Initialize a stdio transport for a command-line MCP server
   /// - Parameters:
+  ///   - options: Transport options
+  ///   - configuration: Transport configuration
+  public init(
+    options: StdioTransportOptions,
+    configuration: TransportConfiguration = .default
+  ) {
+    self.init(
+      command: options.command,
+      arguments: options.arguments,
+      environment: options.environment,
+      configuration: configuration
+    )
+  }
+
+  /// Initialize a stdio transport for a command-line MCP server
+  /// - Parameters:
   ///   - command: The command to execute (e.g., "npx")
   ///   - arguments: Command arguments (e.g., ["-y", "@modelcontextprotocol/server-git"])
   ///   - environment: Optional environment variables to set
   ///   - configuration: Transport configuration
   public init(
-    options: StdioTransportOptions,
+    command: String,
+    arguments: [String] = [],
+    environment: [String: String]? = nil,
     configuration: TransportConfiguration = .default
   ) {
     self.configuration = configuration
@@ -50,12 +68,12 @@ public actor StdioTransport: MCPTransport {
 
     // Setup executable path and arguments
     self.process.executableURL = URL(fileURLWithPath: "/usr/bin/env")  // Use /usr/bin/env to locate the command in PATH
-    self.process.arguments = [options.command] + options.arguments
+    self.process.arguments = [command] + arguments
 
     // Setup environment
     var processEnv = ProcessInfo.processInfo.environment
     // Merge any custom environment variables
-    options.environment?.forEach { processEnv[$0] = $1 }
+    environment?.forEach { processEnv[$0] = $1 }
 
     // Ensure PATH includes common tool locations for npm/npx
     if var path = processEnv["PATH"] {

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Tool: Codable, Sendable {
+public struct MCPTool: Codable, Sendable {
     public let name: String
     public let description: String?
     public let inputSchema: ToolInputSchema
@@ -100,6 +100,6 @@ public struct ListToolsResult: MCPResponse {
     public typealias Request = ListToolsRequest
 
     public let _meta: [String: AnyCodable]?
-    public let tools: [Tool]
+    public let tools: [MCPTool]
     public let nextCursor: String?
 }

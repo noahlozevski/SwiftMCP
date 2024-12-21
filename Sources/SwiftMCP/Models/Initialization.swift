@@ -28,7 +28,7 @@ public struct InitializeRequest: MCPRequest {
     }
 }
 
-public struct InitializeResult: MCPResponse {
+public struct InitializeResult: MCPResponse, Equatable {
     public typealias Request = InitializeRequest
     public let capabilities: ServerCapabilities
     public let protocolVersion: String
@@ -48,6 +48,12 @@ public struct InitializeResult: MCPResponse {
         self.serverInfo = serverInfo
         self.instructions = instructions
         self.meta = meta
+    }
+
+    public static func == (lhs: InitializeResult, rhs: InitializeResult) -> Bool {
+        return (lhs.capabilities == rhs.capabilities)
+            && (lhs.protocolVersion == rhs.protocolVersion)
+            && (lhs.serverInfo == rhs.serverInfo) && (lhs.instructions == rhs.instructions)
     }
 }
 
@@ -96,7 +102,7 @@ extension ClientCapabilities: CustomStringConvertible {
     }
 }
 
-public struct Implementation: Codable, Sendable {
+public struct Implementation: Codable, Sendable, Equatable {
     public let name: String
     public let version: String
 

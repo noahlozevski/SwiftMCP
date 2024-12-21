@@ -1,9 +1,11 @@
 import Foundation
 
 /// Protocol defining common behavior for MCP endpoints
-public protocol MCPEndpoint: Actor {
+public protocol MCPEndpointProtocol: Actor {
+  associatedtype SessionInfo: Equatable
+
   /// Current endpoint state
-  var state: MCPEndpointState { get }
+  var state: MCPEndpointState<SessionInfo> { get }
 
   /// Stream of notifications from this endpoint
   var notifications: AsyncStream<MCPNotification> { get }
@@ -19,7 +21,7 @@ public protocol MCPEndpoint: Actor {
 }
 
 /// Common state representation for MCP endpoints
-public enum MCPEndpointState: Equatable {
+public enum MCPEndpointState<State: Equatable>: Equatable {
   /// Endpoint is disconnected
   case disconnected
 
@@ -30,7 +32,7 @@ public enum MCPEndpointState: Equatable {
   case initializing
 
   /// Endpoint is running with negotiated capabilities
-  case running(ServerCapabilities)
+  case running(State)
 
   /// Endpoint has failed
   case failed(Error)
