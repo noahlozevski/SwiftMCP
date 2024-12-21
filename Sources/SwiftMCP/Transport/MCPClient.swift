@@ -17,7 +17,8 @@ public actor MCPClient: MCPEndpoint {
 
   public init(
     transport: any MCPTransport,
-    configuration: TransportConfiguration = .default
+    configuration: TransportConfiguration = .default,
+    capabilities: ClientCapabilities = .init()
   ) {
     self.transport = transport
     self.configuration = configuration
