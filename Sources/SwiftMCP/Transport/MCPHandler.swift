@@ -21,7 +21,7 @@ final class TypedResponseHandler<Request: MCPRequest>: ResponseHandler {
   func handle(_ data: Data) throws -> Bool {
     guard
       let response = try? JSONDecoder().decode(
-        JSONRPCMessage<Request, Request.Response>.self,
+        JSONRPCMessage<Request>.self,
         from: data
       )
     else {

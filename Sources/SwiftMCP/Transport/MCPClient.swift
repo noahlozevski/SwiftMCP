@@ -32,13 +32,14 @@ public actor MCPClient: MCPEndpoint {
 
   public func start() async throws {
     guard case .disconnected = state else {
-      throw MCPError.internalError("Client is not disconnected")
+      return
     }
 
     state = .connecting
 
     // Start message processing
     messageProcessingTask = Task {
+      try await transport.start()
       do {
         for try await data in await transport.messages() {
           if Task.isCancelled { break }
@@ -93,7 +94,7 @@ public actor MCPClient: MCPEndpoint {
   private func sendRequest<R: MCPRequest>(_ request: R) async throws -> R.Response {
     // Create message with unique ID
     let requestId = RequestID.string(UUID().uuidString)
-    let message = JSONRPCMessage<R, R.Response>.request(id: requestId, request: request)
+    let message = JSONRPCMessage<R>.request(id: requestId, request: request)
 
     // Setup response handling
     return try await withCheckedThrowingContinuation { continuation in
@@ -117,7 +118,7 @@ public actor MCPClient: MCPEndpoint {
   private func processIncomingMessage(_ data: Data) async throws {
     // First try as notification
     if let message = try? JSONDecoder().decode(
-      JSONRPCMessage<InitializeRequest, InitializeResult>.self,
+      JSONRPCMessage<EmptyRequest>.self,
       from: data
     ) {
       if case .notification(let notification) = message {
@@ -155,7 +156,7 @@ public actor MCPClient: MCPEndpoint {
 
     // Send initialized notification
     let notification = InitializedNotification()
-    let message = JSONRPCMessage<InitializeRequest, InitializeResult>.notification(notification)
+    let message = JSONRPCMessage<InitializeRequest>.notification(notification)
     let data = try JSONEncoder().encode(message)
     try await transport.send(data)
 
@@ -200,5 +201,42 @@ public actor MCPClient: MCPEndpoint {
       handler.cancel(error)
     }
     requestHandlers.removeAll()
+  }
+}
+
+// MARK: Client API
+extension MCPClient {
+  public func listPrompts() async throws -> ListPromptsResult {
+    try await send(ListPromptsRequest())
+  }
+
+  public func listTools() async throws -> ListToolsResult {
+    try await send(ListToolsRequest())
+  }
+
+  // TODO: Don't expose anycodable
+  public func callTool(
+    _ toolName: String,
+    with arguments: [String: AnyCodable]? = nil
+  ) async throws -> CallToolResult {
+    try await send(CallToolRequest(name: toolName, arguments: arguments))
+  }
+
+  public func setLoggingLevel(_ level: LoggingLevel) async throws {
+    _ = try await send(SetLevelRequest(level: level))
+  }
+
+  public func listResources(_ cursor: String? = nil) async throws -> ListResourcesResult {
+    try await send(ListResourcesRequest(cursor: cursor))
+  }
+
+  public func listResourceTemplates(
+    _ cursor: String? = nil
+  ) async throws -> ListResourceTemplatesResult {
+    try await send(ListResourceTemplatesRequest(cursor: cursor))
+  }
+
+  public func readResource(_ uri: String) async throws -> ReadResourceResult {
+    try await send(ReadResourceRequest(uri: uri))
   }
 }

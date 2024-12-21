@@ -4,7 +4,7 @@ import Foundation
 ///
 /// It can be a request, response, error, or notification.
 /// Requests and responses are strongly typed thanks to generics.
-public enum JSONRPCMessage<Request: MCPRequest, Response: MCPResponse>: Codable {
+public enum JSONRPCMessage<Request: MCPRequest>: Codable {
     /// JSON-RPC version constant
     public var jsonrpcVersion: String { "2.0" }
 
@@ -12,7 +12,7 @@ public enum JSONRPCMessage<Request: MCPRequest, Response: MCPResponse>: Codable 
     case request(id: RequestID, request: Request)
 
     /// A successful response message.
-    case response(id: RequestID, response: Response)
+    case response(id: RequestID, response: Request.Response)
 
     /// An error response message.
     case error(id: RequestID, error: MCPError)
@@ -58,7 +58,8 @@ public enum JSONRPCMessage<Request: MCPRequest, Response: MCPResponse>: Codable 
             // Could be request, response, or error
             if let errorVal = try container.decodeIfPresent(MCPError.self, forKey: .error) {
                 self = .error(id: id, error: errorVal)
-            } else if let resultVal = try? container.decode(Response.self, forKey: .result) {
+            } else if let resultVal = try? container.decode(Request.Response.self, forKey: .result)
+            {
                 self = .response(id: id, response: resultVal)
             } else {
                 // Must be a request
@@ -96,6 +97,28 @@ public enum JSONRPCMessage<Request: MCPRequest, Response: MCPResponse>: Codable 
         guard version == jsonrpcVersion else {
             throw MCPError.invalidRequest("Invalid JSON-RPC version")
         }
+    }
+}
+
+struct EmptyRequest: MCPRequest {
+    typealias Response = EmptyResult
+
+    var params: (any Encodable)? { nil }
+
+    static let method = "empty"
+}
+
+struct EmptyResult: MCPResponse {
+    typealias Request = EmptyRequest
+}
+
+extension JSONRPCMessage where Request == EmptyRequest, Request.Response == EmptyResult {
+    init(notification: MCPNotification) {
+        self = .notification(notification)
+    }
+
+    init(id: RequestID, error: MCPError) {
+        self = .error(id: id, error: error)
     }
 }
 

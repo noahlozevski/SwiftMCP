@@ -25,7 +25,12 @@ public struct CallToolRequest: MCPRequest {
 
     public struct Params: Codable, Sendable {
         public let name: String
-        public let arguments: [String: AnyCodable]?
+        public let arguments: [String: AnyCodable]
+
+        public init(name: String, arguments: [String: AnyCodable]?) {
+            self.name = name
+            self.arguments = arguments ?? [:]
+        }
     }
     public var params: Encodable? { internalParams }
 
