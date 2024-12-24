@@ -5,7 +5,7 @@ let package = Package(
     name: "SwiftMCP",
     platforms: [
         .macOS(.v13),
-        .iOS(.v16),
+        .iOS(.v16)
     ],
     products: [
         .library(
@@ -13,17 +13,23 @@ let package = Package(
             targets: ["SwiftMCP"]
         )
     ],
-    dependencies: [],
+    dependencies: [
+        .package(
+            url: "https://github.com/kevinhermawan/swift-json-schema.git",
+            .upToNextMajor(from: "1.0.0"))
+    ],
     targets: [
         .target(
             name: "SwiftMCP",
-            dependencies: []
+            dependencies: [
+                .product(name: "JSONSchema", package: "swift-json-schema")
+            ]
         ),
         .testTarget(
             name: "SwiftMCPTests",
             dependencies: [
                 "SwiftMCP"
             ]
-        ),
+        )
     ]
 )

@@ -1,23 +1,27 @@
 import Foundation
 
 public struct MCPContext {
-    public let id: String
-    public let serverInfo: Implementation
-    public let capabilities: ServerCapabilities
-    public let resources: [MCPResource]
-    public let prompts: [MCPPrompt]
-    public let tools: [MCPTool]
-    public let instructions: String?
+  public let id: String
+  public let serverInfo: Implementation
+  public let capabilities: ServerCapabilities
+  public let resources: [MCPResource]
+  public let prompts: [MCPPrompt]
+  public let tools: [MCPTool]
+  public let instructions: String?
 }
 
-public protocol MCPHostConfiguration {
-    /// The default client configuration to use when creating new clients
-    var defaultClientConfig: MCPClient.Configuration { get }
+public struct MCPHostConfiguration {
+  /// The default client configuration to use when creating new clients
+  public var defaultClientConfig: MCPClient.Configuration
+
+  public init(clientConfig: MCPClient.Configuration) {
+    self.defaultClientConfig = clientConfig
+  }
 }
 
 public protocol MCPContextManaging {
-    func handleSampling(_ request: CreateMessageRequest, from client: MCPClient) async throws
-        -> CreateMessageResult
+  func handleSampling(_ request: CreateMessageRequest, from client: MCPClient) async throws
+    -> CreateMessageResult
 }
 
 /// Host should:
@@ -31,91 +35,161 @@ public protocol MCPContextManaging {
 ///
 
 public actor MCPHost {
-    private let configuration: MCPHostConfiguration
-    private var contextManager: MCPContextManaging?
+  private let configuration: MCPHostConfiguration
+  private var contextManager: MCPContextManaging?
 
-    private struct ServerConnection: Identifiable, Sendable {
-        let id: String
-        let serverInfo: Implementation
-        let capabilities: ServerCapabilities
+  private var notificationTasks: [String: Task<Void, Never>] = [:]
 
-        let transport: any MCPTransport
-        let client: MCPClient
+  private struct ServerConnection: Identifiable, Sendable {
+    let id: String
+    let serverInfo: Implementation
+    let capabilities: ServerCapabilities
 
-        /// Aggregated capabilities from the server
+    let transport: any MCPTransport
+    let client: MCPClient
 
-        var resources: [MCPResource] = []
-        var prompts: [MCPPrompt] = []
-        var tools: [MCPTool] = []
+    /// Aggregated capabilities from the server
 
-        /// Initialization instructions, if present, for the host to combine or store.
-        var instructions: String?
+    var resources: [MCPResource] = []
+    var prompts: [MCPPrompt] = []
+    var tools: [MCPTool] = []
+
+    /// Initialization instructions, if present, for the host to combine or store.
+    var instructions: String?
+  }
+
+  private var connections: [String: ServerConnection] = [:]
+
+  public init(configuration: MCPHostConfiguration) {
+    self.configuration = configuration
+  }
+
+  public var installedServers: [String] {
+    connections.keys.map { $0 }
+  }
+
+  public func connect(
+    _ id: String,
+    transport: MCPTransport
+  ) async throws {
+    let clientConfig = configuration.defaultClientConfig
+    let client = MCPClient(
+      clientInfo: clientConfig.clientInfo, capabilities: clientConfig.capabilities)
+
+    try await client.start(transport)
+
+    guard case .running(let sessionInfo) = await client.state else {
+      throw MCPError.internalError("Expected running state")
     }
 
-    private var connections: [String: ServerConnection] = [:]
+    let capabilities = sessionInfo.capabilities
 
-    public init(configuration: MCPHostConfiguration) {
-        self.configuration = configuration
+    var prompts: [MCPPrompt] = []
+    var tools: [MCPTool] = []
+    var resources: [MCPResource] = []
+
+    if capabilities.supports(.prompts) {
+      prompts = try await client.listPrompts().prompts
     }
 
-    public func registerContextManager(_ manager: MCPContextManaging) {
-        contextManager = manager
+    if capabilities.supports(.resources) {
+      resources = try await client.listResources().resources
     }
 
-    public func connect(
-        _ id: String,
-        transport: MCPTransport
-    ) async throws {
-        let clientConfig = configuration.defaultClientConfig
-        let client = MCPClient(
-            clientInfo: clientConfig.clientInfo, capabilities: clientConfig.capabilities)
-
-        try await client.start(transport)
-
-        guard case .running(let sessionInfo) = await client.state else {
-            throw MCPError.internalError("Expected running state")
-        }
-
-        async let prompts = try await client.listPrompts()
-        async let tools = try await client.listTools()
-        async let resources = try await client.listResources()
-
-        let serverInfo = ServerConnection(
-            id: id,
-            serverInfo: sessionInfo.serverInfo,
-            capabilities: sessionInfo.capabilities,
-            transport: transport,
-            client: client,
-            resources: try await resources.resources,
-            prompts: try await prompts.prompts,
-            tools: try await tools.tools,
-            instructions: sessionInfo.instructions
-        )
-
-        connections[id] = serverInfo
+    if capabilities.supports(.tools) {
+      tools = try await client.listTools().tools
     }
 
-    public func disconnect(_ id: String) async {
-        guard let connection = connections.removeValue(forKey: id) else {
-            return
-        }
+    let serverInfo = ServerConnection(
+      id: id,
+      serverInfo: sessionInfo.serverInfo,
+      capabilities: sessionInfo.capabilities,
+      transport: transport,
+      client: client,
+      resources: resources,
+      prompts: prompts,
+      tools: tools,
+      instructions: sessionInfo.instructions
+    )
 
-        await connection.client.stop()
+    connections[id] = serverInfo
+
+    await handleNotifications(for: id)
+  }
+
+  public func disconnect(_ id: String) async {
+    guard let connection = connections.removeValue(forKey: id) else {
+      return
     }
 
-    public func getContext(for id: String) async throws -> MCPContext {
-        guard let connection = connections[id] else {
-            throw MCPError.invalidRequest("No connection found for \(id)")
-        }
+    await unregisterNotifications(for: id)
+    await connection.client.stop()
+  }
 
-        return MCPContext(
-            id: id,
-            serverInfo: connection.serverInfo,
-            capabilities: connection.capabilities,
-            resources: connection.resources,
-            prompts: connection.prompts,
-            tools: connection.tools,
-            instructions: connection.instructions
-        )
+  public func getContext(for id: String) async throws -> MCPContext {
+    guard let connection = connections[id] else {
+      throw MCPError.invalidRequest("No connection found for \(id)")
     }
+
+    return MCPContext(
+      id: id,
+      serverInfo: connection.serverInfo,
+      capabilities: connection.capabilities,
+      resources: connection.resources,
+      prompts: connection.prompts,
+      tools: connection.tools,
+      instructions: connection.instructions
+    )
+  }
+
+  public func availableTools() -> [MCPTool] {
+    connections.values.flatMap { $0.tools }
+  }
+
+  public func client(id: String) -> MCPClient? {
+    guard let connection = connections[id] else { return nil }
+
+    return connection.client
+  }
+
+  // MARK: - Private Helpers
+
+  private func handleNotifications(for id: String) async {
+    guard let connection = connections[id] else { return }
+
+    notificationTasks[id] = Task {
+      for await notification in connection.client.notifications {
+        await processNotification(notification, for: id)
+      }
+    }
+  }
+
+  private func processNotification(_ notification: MCPNotification, for id: String) async {
+    guard var connection = connections[id] else { return }
+
+    switch notification {
+    case is ResourceListChangedNotification:
+      if let resources = try? await connection.client.listResources() {
+        connection.resources = resources.resources
+      }
+
+    case is PromptListChangedNotification:
+      if let prompts = try? await connection.client.listPrompts() {
+        connection.prompts = prompts.prompts
+      }
+
+    case is ToolListChangedNotification:
+      if let tools = try? await connection.client.listTools() {
+        connection.tools = tools.tools
+      }
+
+    default:
+      break
+    }
+  }
+
+  private func unregisterNotifications(for id: String) async {
+    guard let task = notificationTasks.removeValue(forKey: id) else { return }
+    task.cancel()
+  }
 }

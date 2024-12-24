@@ -83,8 +83,8 @@ public struct ClientCapabilities: Codable, Sendable {
 
 extension ClientCapabilities: Equatable {
     public static func == (lhs: ClientCapabilities, rhs: ClientCapabilities) -> Bool {
-        // TODO: Full comparison
-        return lhs.roots == rhs.roots
+        return (lhs.roots == rhs.roots) && (lhs.experimental == rhs.experimental)
+            && (lhs.sampling == rhs.sampling)
     }
 }
 
@@ -99,6 +99,32 @@ extension ClientCapabilities: CustomStringConvertible {
         }
 
         return desc + ")"
+    }
+}
+
+extension ClientCapabilities {
+    public struct Features: OptionSet {
+        public let rawValue: Int
+
+        public static let roots = Features(rawValue: 1 << 0)
+        public static let sampling = Features(rawValue: 1 << 1)
+        public static let experimental = Features(rawValue: 1 << 2)
+
+        public init(rawValue: Int) {
+            self.rawValue = rawValue
+        }
+    }
+
+    public var supportedFeatures: Features {
+        var features = Features()
+        if roots != nil { features.insert(.roots) }
+        if sampling != nil { features.insert(.sampling) }
+        if experimental != nil { features.insert(.experimental) }
+        return features
+    }
+
+    public func supports(_ feature: Features) -> Bool {
+        return supportedFeatures.contains(feature)
     }
 }
 
@@ -179,8 +205,34 @@ extension ServerCapabilities: CustomStringConvertible {
 
 extension ServerCapabilities: Equatable {
     public static func == (lhs: ServerCapabilities, rhs: ServerCapabilities) -> Bool {
-        // TODO: Full comparison
         return (lhs.prompts == rhs.prompts) && (lhs.resources == rhs.resources)
-            && (lhs.tools == rhs.tools)
+            && (lhs.tools == rhs.tools) && (lhs.experimental == rhs.experimental)
+            && (lhs.logging == rhs.logging)
+    }
+}
+
+extension ServerCapabilities {
+    public struct Features: OptionSet {
+        public let rawValue: Int
+
+        public static let tools = Features(rawValue: 1 << 0)
+        public static let resources = Features(rawValue: 1 << 1)
+        public static let prompts = Features(rawValue: 1 << 2)
+
+        public init(rawValue: Int) {
+            self.rawValue = rawValue
+        }
+    }
+
+    public var supportedFeatures: Features {
+        var features = Features()
+        if tools != nil { features.insert(.tools) }
+        if resources != nil { features.insert(.resources) }
+        if prompts != nil { features.insert(.prompts) }
+        return features
+    }
+
+    public func supports(_ feature: Features) -> Bool {
+        return supportedFeatures.contains(feature)
     }
 }

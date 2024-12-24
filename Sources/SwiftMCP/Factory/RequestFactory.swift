@@ -8,7 +8,7 @@ public enum RequestFactory {
   // completion/complete, prompts/list, prompts/get, etc.
   // server requests:
   // roots/list, sampling/createMessage
-  
+
   public static func makeRequest(
     method: String,
     params: [String: AnyCodable]?
@@ -89,5 +89,5 @@ public enum RequestFactory {
     }
     return nil
   }
-  
+
 }

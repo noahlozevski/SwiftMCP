@@ -1,22 +1,10 @@
 import Foundation
+@preconcurrency import JSONSchema
 
 public struct MCPTool: Codable, Sendable {
     public let name: String
     public let description: String?
-    public let inputSchema: ToolInputSchema
-
-    public struct ToolInputSchema: Codable, Sendable {
-        public let type: String
-        public let properties: [String: SchemaProperty]?
-        public let required: [String]?
-
-        public struct SchemaProperty: Codable, Sendable {
-            // We allow any schema object, but minimal:
-            public let type: String?
-            public let description: String?
-            public let additionalProperties: [String: AnyCodable]?
-        }
-    }
+    public let inputSchema: JSONSchema
 }
 
 public struct CallToolRequest: MCPRequest {

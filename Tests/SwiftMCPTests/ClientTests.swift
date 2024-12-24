@@ -127,9 +127,8 @@ struct MCPClientTests {
       throw MCPError.internalError("Expected running state")
     }
 
-    // Verify initialization message was sent
     let count = await transport.sentMessageCount()
-    try await #require(count == 2)  // Init request + notification
+    try #require(count == 2)  // Init request + notification
 
     let initMessage: JSONRPCMessage<InitializeRequest> =
       try await transport.lastSentMessage(JSONRPCMessage<InitializeRequest>.self)
@@ -155,36 +154,17 @@ struct MCPClientTests {
   }
 
   @Test(
-    "Successfully sends requests and receives responses",
-    .disabled("Need better coordination for request / response before enabling")
+    "Successfully sends requests and receives responses"
   )
   func testRequestResponse() async throws {
-    let transport = MockTransport()
-    // Queue initialization first
-    await transport.queueInitSuccess()
+    let transport = StdioTransport(
+      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
 
-    // Queue prompts list response
-    await transport.queueResponse { data in
-      // Decode the request to get its ID
-      let request = try JSONDecoder().decode(
-        JSONRPCMessage<ListPromptsRequest>.self,
-        from: data
-      )
-      guard case .request(let id, _) = request else {
-        throw MCPError.internalError("Expected request")
-      }
+    try #require(await client.start(transport))
+    let result = try #require(await client.listTools())
+    #expect(result.tools.count > 0)
 
-      let response = JSONRPCMessage<ListPromptsRequest>.response(
-        id: id,  // Use the same ID from request
-        response: ListPromptsResult(prompts: [], nextCursor: nil)
-      )
-      return try JSONEncoder().encode(response)
-    }
-
-    try await client.start(transport)
-
-    let result = try await client.send(ListPromptsRequest())
-    #expect(result.prompts.isEmpty)
+    await client.stop()
   }
 
   @Test("Handles notifications")
@@ -214,8 +194,8 @@ struct MCPClientTests {
     _ = await notificationTask.value
 
     #expect(receivedNotifications.count == 2)
-    #expect(receivedNotifications[0] as? PromptListChangedNotification != nil)
-    #expect(receivedNotifications[1] as? ResourceListChangedNotification != nil)
+    #expect(receivedNotifications[0] is PromptListChangedNotification)
+    #expect(receivedNotifications[1] is ResourceListChangedNotification)
   }
 
   @Test("Validates capabilities")

@@ -28,7 +28,7 @@ public enum RequestID: Codable, Hashable, Sendable {
 }
 
 /// AnyCodable helper for dynamic JSON fields.
-public struct AnyCodable: Codable, @unchecked Sendable {
+public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
     public let value: Any
 
     public init(_ value: Any) {
@@ -69,6 +69,27 @@ public struct AnyCodable: Codable, @unchecked Sendable {
                 codingPath: container.codingPath,
                 debugDescription: "Invalid type")
             throw EncodingError.invalidValue(value, context)
+        }
+    }
+
+    public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+        switch (lhs.value, rhs.value) {
+        case (let lhs as Bool, let rhs as Bool):
+            return lhs == rhs
+        case (let lhs as Int, let rhs as Int):
+            return lhs == rhs
+        case (let lhs as Double, let rhs as Double):
+            return lhs == rhs
+        case (let lhs as String, let rhs as String):
+            return lhs == rhs
+        case (let lhs as [String: AnyCodable], let rhs as [String: AnyCodable]):
+            return lhs == rhs
+        case (let lhs as [AnyCodable], let rhs as [AnyCodable]):
+            return lhs == rhs
+        case (is NSNull, is NSNull):
+            return true
+        default:
+            return false
         }
     }
 }

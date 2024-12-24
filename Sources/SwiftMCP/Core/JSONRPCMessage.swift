@@ -58,8 +58,7 @@ public enum JSONRPCMessage<Request: MCPRequest>: Codable {
             // Could be request, response, or error
             if let errorVal = try container.decodeIfPresent(MCPError.self, forKey: .error) {
                 self = .error(id: id, error: errorVal)
-            } else if let resultVal = try? container.decode(Request.Response.self, forKey: .result)
-            {
+            } else if let resultVal = try? container.decode(Request.Response.self, forKey: .result) {
                 self = .response(id: id, response: resultVal)
             } else {
                 // Must be a request

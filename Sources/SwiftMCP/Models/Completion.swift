@@ -20,14 +20,12 @@ public struct CompleteRequest: MCPRequest {
             public init(from decoder: Decoder) throws {
                 let container = try decoder.singleValueContainer()
                 if let promptRef = try? container.decode(PromptRef.self),
-                    promptRef.type == "ref/prompt"
-                {
+                    promptRef.type == "ref/prompt" {
                     self = .prompt(promptRef)
                     return
                 }
                 if let resourceRef = try? container.decode(ResourceRef.self),
-                    resourceRef.type == "ref/resource"
-                {
+                    resourceRef.type == "ref/resource" {
                     self = .resource(resourceRef)
                     return
                 }

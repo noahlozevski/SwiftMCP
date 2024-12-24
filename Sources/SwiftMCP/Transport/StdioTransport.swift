@@ -83,7 +83,7 @@ public actor StdioTransport: MCPTransport {
         "\(processEnv["HOME"] ?? "")/node_modules/.bin",  // Local project binaries
         "\(processEnv["HOME"] ?? "")/.npm-global/bin",  // Global npm installs
         "/opt/homebrew/bin",  // Homebrew on Apple Silicon
-        "/usr/local/opt/node/bin",  // Node from Homebrew
+        "/usr/local/opt/node/bin"  // Node from Homebrew
       ]
       path = (additionalPaths + [path]).joined(separator: ":")
       processEnv["PATH"] = path

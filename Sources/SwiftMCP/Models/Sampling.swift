@@ -23,14 +23,12 @@ public struct SamplingMessage: Codable, Sendable {
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
-            if let textContent = try? container.decode(TextContent.self), textContent.type == "text"
-            {
+            if let textContent = try? container.decode(TextContent.self), textContent.type == "text" {
                 self = .text(textContent)
                 return
             }
             if let imageContent = try? container.decode(ImageContent.self),
-                imageContent.type == "image"
-            {
+                imageContent.type == "image" {
                 self = .image(imageContent)
                 return
             }
@@ -92,14 +90,12 @@ public struct CreateMessageResult: MCPResponse {
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
-            if let textContent = try? container.decode(TextContent.self), textContent.type == "text"
-            {
+            if let textContent = try? container.decode(TextContent.self), textContent.type == "text" {
                 self = .text(textContent)
                 return
             }
             if let imageContent = try? container.decode(ImageContent.self),
-                imageContent.type == "image"
-            {
+                imageContent.type == "image" {
                 self = .image(imageContent)
                 return
             }
