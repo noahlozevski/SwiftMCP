@@ -1,6 +1,5 @@
 import Foundation
 
-/// Ping
 public struct PingRequest: MCPRequest {
     public static let method = "ping"
     public typealias Response = EmptyResult

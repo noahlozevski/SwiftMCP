@@ -146,6 +146,41 @@ public actor MCPHost {
     connections.values.flatMap { $0.tools }
   }
 
+  /// Calls a tool by name, automatically finding the appropriate client that provides it
+  /// - Parameters:
+  ///   - name: The name of the tool to call
+  ///   - arguments: The arguments to pass to the tool
+  /// - Returns: The result from the tool execution
+  /// - Throws: MCPError if the tool cannot be found or the call fails
+  public func callTool(_ name: String, arguments: [String: Any]) async throws -> CallToolResult {
+    // Find the connection that has this tool
+    guard
+      let connection = connections.values.first(where: { connection in
+        connection.tools.contains { $0.name == name }
+      })
+    else {
+      throw MCPError.invalidRequest("No server found providing tool: \(name)")
+    }
+
+    // Find the tool to get its ID
+    guard let tool = tool(named: name) else {
+      throw MCPError.invalidRequest("Tool not found: \(name)")
+    }
+
+    // Call the tool using the client
+    return try await connection.client.callTool(
+      tool.name, with: arguments.mapValues { AnyCodable($0) })
+  }
+
+  /// Gets information about a tool by its name
+  /// - Parameter name: The name of the tool to look up
+  /// - Returns: The tool information if found
+  public func tool(named name: String) -> MCPTool? {
+    connections.values
+      .flatMap(\.tools)
+      .first { $0.name == name }
+  }
+
   public func client(id: String) -> MCPClient? {
     guard let connection = connections[id] else { return nil }
 
