@@ -74,9 +74,85 @@ for await notification in await client.notifications {
 ```
 
 ### Hosts
-TODO :)
+Hosts are used to manage client connections and provide a higher-level API for handling requests and notifications:
 
-### Error Handling
+#### Basic Setup
+
+To get started, you need to create an `MCPHost` instance and connect to a server using a transport layer:
+
+```swift
+import SwiftMCP
+
+// Basic host - assumes app name and version via Bundle properties
+let host = MCPHost()
+// or more advanced configuration
+let host = MCPHost(config:
+    .init(
+        roots: .list([Root(uri: "file:///some/root")]),
+        sampling: .init(
+            handler: { request in
+                /** Use your llm to fulfill the server's sampling request */
+                let completion = try await myLLM.complete(
+                    messages: request.messages,
+                    // other options
+                )
+                return CreateMessageResult( /** the result */)
+
+                // or reject the request
+                throw Error.notAllowed
+            }),
+        clientInfo: /** your explicit client info */,
+        capabilities: /** Your explicit client capabilities (inferred by default from what root / sampling config is provided) */
+
+    )
+)
+
+let transport = StdioTransport(command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"])
+
+let connection = try await host.connect("test", transport: transport)
+```
+
+#### Sending Requests
+
+```swift
+let tools = try await connection.listTools()
+
+print("Available tools: \(tools.tools)")
+```
+
+#### Handling Notifications
+
+Notifications can be handled by subscribing to the `notifications` stream:
+
+> Note: The connection automatically observes server notifications and will update tools, resources, and prompts accordingly. You only need to observe notifications if you want to handle them directly in your application code.
+
+
+```swift
+let notificationStream = await connection.notifications
+for await notification in notificationStream {
+    switch notification {
+    case let toolChanged as ToolListChangedNotification:
+        print("Tool list changed: \(toolChanged)")
+    default:
+        break
+    }
+}
+```
+
+#### Progress Tracking
+
+For long-running operations, you can track progress using a progress handler:
+
+```swift
+let _ = try await connection.callTool(
+    "longRunningOperation",
+    arguments: ["duration": 5, "steps": 10]) { progress, total in
+        print("Progress: \(progress) / \(total ?? 0)")
+    }
+```
+
+
+#### Error Handling
 
 SwiftMCP provides structured error handling:
 
@@ -143,33 +219,6 @@ let transport = StdioTransport(
 )
 ```
 
-## Core Concepts
-
-### Message Types
-
-SwiftMCP uses three main message types:
-
-- **Requests**: Messages expecting a response
-- **Responses**: Success or error replies to requests 
-- **Notifications**: One-way messages without responses
-
-### Transport Layer
-
-The transport layer abstracts communication details:
-
-- `StdioTransport`: Process-based communication
-- `SSETransport`: Server-Sent Events over HTTP
-- Custom transports through `MCPTransport` protocol
-
-### Actor-Based Architecture
-
-SwiftMCP uses Swift's actor model for thread-safe concurrent operations:
-
-- `MCPHost`: Host actor for managing client connections
-- `MCPClient`: Main client actor
-- `MCPTransport`: Transport protocol requiring actor conformance
-- Built-in sync points through async/await
-
 ## API Documentation
 
 Visit [modelcontextprotocol.io](https://modelcontextprotocol.io) for full protocol documentation.
@@ -192,11 +241,12 @@ Key types and protocols:
 - ✅ Type-safe requests and responses
 - ✅ Basic error handling and timeouts
 - ✅ Client implementation with transport abstraction
-- 🚧 Host implementation improvements
+- ✅ Host implementation improvements
+- ✅ Enhanced sampling capabilities
+- ✅ Progress monitoring enhancements
 - 🚧 WebSocket transport
-- 🚧 Enhanced sampling capabilities
+- 🚧 MCP Server implementation
 - 🚧 Example servers and implementations
-- 🚧 Progress monitoring enhancements
 
 ## Contributing
 
@@ -222,6 +272,3 @@ swift build
 swift test
 ```
 
-## License
-
-SwiftMCP is available under the MIT license. See the [LICENSE](LICENSE) file for more info.
