@@ -1,43 +1,33 @@
 import Foundation
-import OSLog
-
-private let logger = Logger(subsystem: "SwiftMCP", category: "MCPConnection")
-
-/// Information about a connected MCP server
-public struct ConnectionInfo: Sendable, Identifiable {
-  /// Unique connection identifier
-  public let id: String
-
-  /// Current connection state
-  public let state: ConnectionState
-
-  /// Server information
-  public let serverInfo: Implementation
-
-  /// Server capabilities
-  public let capabilities: ServerCapabilities
-
-  /// Connection statistics
-  public let stats: ConnectionStats
-
-  public struct ConnectionStats: Sendable {
-    public let lastActivity: Date
-    public let reconnectCount: Int
-    public let connectedAt: Date
-  }
-}
 
 /// Handle for interacting with a specific MCP server connection
-public actor MCPConnection: Identifiable, Sendable {
-  public let id: String
-  private let client: MCPClient
-  private let serverInfo: Implementation
-  private let capabilities: ServerCapabilities
+@Observable public final class ConnectionState: Identifiable {
+  // MARK: - Properties
 
-  private var lastActivity: Date = Date()
-  private var reconnectCount: Int = 0
-  private var connectedAt: Date = Date()
-  private var state: ConnectionState = .connected
+  public let id: String
+  public let serverInfo: Implementation
+  public let capabilities: ServerCapabilities
+
+  public private(set) var tools: [MCPTool] = []
+  public private(set) var resources: [MCPResource] = []
+  public private(set) var prompts: [MCPPrompt] = []
+
+  public private(set) var lastActivity: Date = Date()
+  public private(set) var reconnectCount: Int = 0
+  private let connectedAt: Date = Date()
+
+  public private(set) var isRefreshingTools = false
+  public private(set) var isRefreshingResources = false
+  public private(set) var isRefreshingPrompts = false
+
+  private var statusMonitorTask: Task<Void, Never>?
+
+  let client: MCPClient
+
+  // MARK: - Status
+
+  public private(set) var status: ConnectionStatus = .connected
+  public var isConnected: Bool { status == .connected }
 
   init(
     id: String,
@@ -49,155 +39,187 @@ public actor MCPConnection: Identifiable, Sendable {
     self.client = client
     self.serverInfo = serverInfo
     self.capabilities = capabilities
-  }
 
-  /// Get current connection information
-  public var info: ConnectionInfo {
-    ConnectionInfo(
-      id: id,
-      state: state,
-      serverInfo: serverInfo,
-      capabilities: capabilities,
-      stats: .init(
-        lastActivity: lastActivity,
-        reconnectCount: reconnectCount,
-        connectedAt: connectedAt
-      )
-    )
-  }
-
-  /// Check if connection is active
-  public var isConnected: Bool {
-    get async {
-      let isConnected = await client.isConnected
-      return isConnected
+    self.statusMonitorTask = Task {
+      let eventStream = await client.events
+      for await event in eventStream {
+        switch event {
+        case .connectionChanged(let state):
+          switch state {
+          case .running:
+            status = .connected
+          case .failed:
+            status = .failed
+          case .disconnected:
+            status = .disconnected
+          case .connecting, .initializing:
+            status = .connecting
+          }
+        default:
+          continue
+        }
+      }
     }
   }
 
-  internal func disconnect() async {
-    state = .disconnecting
-    await client.stop()
-    state = .disconnected
+  // MARK: - State Management
+
+  public func refresh() async {
+    guard isConnected else { return }
+    await refreshTools()
+    await refreshResources()
+    await refreshPrompts()
   }
 
-  internal func reconnect() async throws {
-    try await client.reconnect()
-  }
+  func refreshTools() async {
+    guard isConnected, capabilities.supports(.tools) else { return }
 
-  // MARK: - Feature APIs
+    isRefreshingTools = true
+    defer { isRefreshingTools = false }
 
-  public lazy var tools = ToolState(connection: self)
-
-  public lazy var resources = ResourceState(connection: self)
-
-  public lazy var prompts = PromptState(connection: self)
-
-  public lazy var roots = RootsState(connection: self)
-
-  public struct RefreshOptions: OptionSet {
-    public let rawValue: Int
-
-    public static let tools = RefreshOptions(rawValue: 1 << 0)
-    public static let resources = RefreshOptions(rawValue: 1 << 1)
-    public static let prompts = RefreshOptions(rawValue: 1 << 2)
-
-    public static let all: RefreshOptions = [.tools, .resources, .prompts]
-
-    public init(rawValue: Int) {
-      self.rawValue = rawValue
+    do {
+      tools = try await client.listTools().tools
+      lastActivity = Date()
+    } catch {
+      print("Failed to refresh tools: \(error)")
     }
   }
 
-  public func fetch(_ options: RefreshOptions = .all) async {
-    if options.contains(.tools) {
-      await tools.refresh()
-    }
-    if options.contains(.resources) {
-      await resources.refresh()
-    }
-    if options.contains(.prompts) {
-      await prompts.refresh()
+  func refreshResources() async {
+    guard isConnected, capabilities.supports(.resources) else { return }
+
+    isRefreshingResources = true
+    defer { isRefreshingResources = false }
+
+    do {
+      resources = try await client.listResources().resources
+      lastActivity = Date()
+    } catch {
+      print("Failed to refresh resources: \(error)")
     }
   }
 
-  // MARK: - Implementation Details
+  func refreshPrompts() async {
+    guard isConnected, capabilities.supports(.prompts) else { return }
 
-  internal func listTools() async throws -> [MCPTool] {
-    try await client.listTools().tools
+    isRefreshingPrompts = true
+    defer { isRefreshingPrompts = false }
+
+    do {
+      prompts = try await client.listPrompts().prompts
+      lastActivity = Date()
+    } catch {
+      print("Failed to refresh prompts: \(error)")
+    }
   }
 
-  internal func callTool(
+  // MARK: - Tools API
+
+  public func callTool(
     _ name: String,
-    arguments: [String: Any]?,
+    arguments: [String: Any]? = nil,
     progress: ProgressHandler.UpdateHandler? = nil
   ) async throws -> CallToolResult {
-    try await client.callTool(name, with: arguments, progress: progress)
+    guard isConnected, capabilities.supports(.tools) else {
+      throw MCPError.methodNotFound("Connection does not support tools or is disconnected")
+    }
+
+    let result = try await client.callTool(name, with: arguments, progress: progress)
+    lastActivity = Date()
+    return result
   }
 
-  internal func listResources() async throws -> [MCPResource] {
-    try await client.listResources().resources
-  }
+  // MARK: - Resources API
 
-  internal func readResource(
+  public func readResource(
     _ uri: String,
     progress: ProgressHandler.UpdateHandler? = nil
   ) async throws -> ReadResourceResult {
-    try await client.readResource(uri, progress: progress)
+    guard isConnected, capabilities.supports(.resources) else {
+      throw MCPError.methodNotFound("Connection does not support resources or is disconnected")
+    }
+
+    let result = try await client.readResource(uri, progress: progress)
+    lastActivity = Date()
+    return result
   }
 
-  internal func subscribe(to uri: String) async throws {
+  public func subscribe(to uri: String) async throws {
+    guard isConnected, capabilities.supports(.resourceSubscribe) else {
+      throw MCPError.methodNotFound(
+        "Connection does not support resource subscription or is disconnected")
+    }
+
     try await client.subscribe(to: uri)
+    lastActivity = Date()
   }
 
-  internal func unsubscribe(from uri: String) async throws {
+  public func unsubscribe(from uri: String) async throws {
+    guard isConnected, capabilities.supports(.resourceSubscribe) else {
+      throw MCPError.methodNotFound(
+        "Connection does not support resource subscription or is disconnected")
+    }
+
     try await client.unsubscribe(from: uri)
+    lastActivity = Date()
   }
 
-  internal func listPrompts() async throws -> [MCPPrompt] {
-    try await client.listPrompts().prompts
+  // MARK: - Prompts API
+
+  public func listPrompts(
+    cursor: String? = nil,
+    progress: ProgressHandler.UpdateHandler? = nil
+  ) async throws -> ListPromptsResult {
+    guard isConnected, capabilities.supports(.prompts) else {
+      throw MCPError.methodNotFound("Connection does not support prompts or is disconnected")
+    }
+
+    let result = try await client.listPrompts(cursor: cursor, progress: progress)
+    lastActivity = Date()
+    return result
   }
 
-  internal func getPrompt(
+  public func getPrompt(
     _ name: String,
     arguments: [String: String]? = nil,
     progress: ProgressHandler.UpdateHandler? = nil
   ) async throws -> GetPromptResult {
-    try await client.getPrompt(name, arguments: arguments ?? [:])
+    guard isConnected, capabilities.supports(.prompts) else {
+      throw MCPError.methodNotFound("Connection does not support prompts or is disconnected")
+    }
+
+    let result = try await client.getPrompt(name, arguments: arguments, progress: progress)
+    lastActivity = Date()
+    return result
+  }
+}
+
+// MARK: - Connection Extensions
+
+extension ConnectionState: Hashable {
+  public static func == (lhs: ConnectionState, rhs: ConnectionState) -> Bool {
+    lhs.id == rhs.id
   }
 
-  internal func updateRoots(
-    _ config: RootsConfig?
-  ) async throws {
-    try await client.updateRoots(config?.roots)
-  }
-
-  // MARK: - Notifications
-
-  public func notifications() -> AsyncStream<any MCPNotification> {
-    client.notifications
-  }
-
-  public func emit(_ notification: any MCPNotification) async throws {
-    try await client.emit(notification)
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
   }
 }
 
 // Connection state
-public enum ConnectionState: Equatable, Sendable {
+public enum ConnectionStatus: Equatable, Sendable {
   case connected
   case connecting
-  case disconnecting
   case disconnected
-  case failed(Error)
+  case failed
 
-  public static func == (lhs: ConnectionState, rhs: ConnectionState) -> Bool {
+  public static func == (lhs: ConnectionStatus, rhs: ConnectionStatus) -> Bool {
     switch (lhs, rhs) {
     case (.connected, .connected),
       (.connecting, .connecting),
-      (.disconnecting, .disconnecting),
-      (.disconnected, .disconnected):
+      (.disconnected, .disconnected),
+      (.failed, .failed):
       return true
-    case (.failed, .failed): return true
     default: return false
     }
   }

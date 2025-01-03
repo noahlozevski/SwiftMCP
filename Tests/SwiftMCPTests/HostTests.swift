@@ -3,147 +3,56 @@ import Testing
 
 @testable import SwiftMCP
 
-/// # Everything MCP Server
-///
-/// This MCP server attempts to exercise all the features of the MCP protocol. It is not intended to be a useful server, but rather a test server for builders of MCP clients. It implements prompts, tools, resources, sampling, and more to showcase MCP capabilities.
-///
-/// ## Components
-///
-/// ### Tools
-///
-/// 1. `echo`
-///    - Simple tool to echo back input messages
-///    - Input:
-///      - `message` (string): Message to echo back
-///    - Returns: Text content with echoed message
-///
-/// 2. `add`
-///    - Adds two numbers together
-///    - Inputs:
-///      - `a` (number): First number
-///      - `b` (number): Second number
-///    - Returns: Text result of the addition
-///
-/// 3. `longRunningOperation`
-///    - Demonstrates progress notifications for long operations
-///    - Inputs:
-///      - `duration` (number, default: 10): Duration in seconds
-///      - `steps` (number, default: 5): Number of progress steps
-///    - Returns: Completion message with duration and steps
-///    - Sends progress notifications during execution
-///
-/// 4. `sampleLLM`
-///    - Demonstrates LLM sampling capability using MCP sampling feature
-///    - Inputs:
-///      - `prompt` (string): The prompt to send to the LLM
-///      - `maxTokens` (number, default: 100): Maximum tokens to generate
-///    - Returns: Generated LLM response
-///
-/// 5. `getTinyImage`
-///    - Returns a small test image
-///    - No inputs required
-///    - Returns: Base64 encoded PNG image data
-///
-/// 6. `printEnv`
-///    - Prints all environment variables
-///    - Useful for debugging MCP server configuration
-///    - No inputs required
-///    - Returns: JSON string of all environment variables
-///
-/// ### Resources
-///
-/// The server provides 100 test resources in two formats:
-/// - Even numbered resources:
-///   - Plaintext format
-///   - URI pattern: `test://static/resource/{even_number}`
-///   - Content: Simple text description
-///
-/// - Odd numbered resources:
-///   - Binary blob format
-///   - URI pattern: `test://static/resource/{odd_number}`
-///   - Content: Base64 encoded binary data
-///
-/// Resource features:
-/// - Supports pagination (10 items per page)
-/// - Allows subscribing to resource updates
-/// - Demonstrates resource templates
-/// - Auto-updates subscribed resources every 5 seconds
-///
-/// ### Prompts
-///
-/// 1. `simple_prompt`
-///    - Basic prompt without arguments
-///    - Returns: Single message exchange
-///
-/// 2. `complex_prompt`
-///    - Advanced prompt demonstrating argument handling
-///    - Required arguments:
-///      - `temperature` (number): Temperature setting
-///    - Optional arguments:
-///      - `style` (string): Output style preference
-///    - Returns: Multi-turn conversation with images
-///
-/// ## Usage with Claude Desktop
-///
-/// Add to your `claude_desktop_config.json`:
-///
-/// ```json
-/// {
-///   "mcpServers": {
-///     "everything": {
-///       "command": "npx",
-///       "args": [
-///         "-y",
-///         "@modelcontextprotocol/server-everything"
-///       ]
-///     }
-///   }
-/// }
-/// ```
 @Suite("MCP Hosts")
 struct MCPHostTests {
   var configuration = MCPConfiguration(
     roots: .list([])
   )
-
-  let everythingTransport = StdioTransport(
-    command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"]
-  )
+  
+  var everythingTransport: MCPTransport {
+    StdioTransport(
+      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"]
+    )
+  }
+  
+  var memoryTransport: MCPTransport {
+    StdioTransport(
+      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
+  }
 
   @Test
   func testHostConnection() async throws {
     let host = MCPHost(config: configuration)
 
-    let transport = StdioTransport(
-      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
-    let connection = try await host.connect("memory", transport: transport)
+    let connection = try await host.connect("memory", transport: memoryTransport)
 
-    await connection.fetch(.tools)
-    let toolState = await connection.tools
+    await connection.refresh()
+    let tools = connection.tools
 
-    #expect(toolState.tools.count > 0)
+    #expect(tools.count > 0)
 
     await host.disconnect(connection.id)
-
-    let isConnected = await connection.isConnected
+    try await Task.sleep(for: .milliseconds(50))
+    
+    let isConnected = connection.isConnected
 
     #expect(!isConnected)
   }
 
   @Test
-  func testEverythingServerTools() async throws {
+  func testTools() async throws {
     let host = MCPHost(config: configuration)
 
     let connection = try await host.connect("everything", transport: everythingTransport)
 
-    await connection.fetch(.tools)
+    await connection.refreshTools()
 
-    let toolsApi = await connection.tools
-    var tools = toolsApi.tools
+    let tools = connection.tools
 
     #expect(tools.count > 0)
 
-    let echoResponse = try await toolsApi.call("echo", arguments: ["message": "Hello, World!"])
+    let echoResponse = try await connection.callTool(
+      "echo", arguments: ["message": "Hello, World!"])
     let echoContent = try #require(echoResponse.content.first)
     guard case let .text(echoMessage) = echoContent else {
       Issue.record("Expected string content for echo tool")
@@ -152,7 +61,7 @@ struct MCPHostTests {
 
     #expect(echoMessage.text == "Echo: Hello, World!")
 
-    let addResponse = try await toolsApi.call("add", arguments: ["a": 1, "b": 2])
+    let addResponse = try await connection.callTool("add", arguments: ["a": 1, "b": 2])
     let addContent = try #require(addResponse.content.first)
     guard case let .text(addResult) = addContent else {
       Issue.record("Expected string content for add tool")
@@ -162,7 +71,7 @@ struct MCPHostTests {
     #expect(addResult.text.contains("3"))
 
     // Image
-    let imageResponse = try await toolsApi.call("getTinyImage", arguments: [:])
+    let imageResponse = try await connection.callTool("getTinyImage", arguments: [:])
 
     let imageContent = imageResponse.content.first { content in
       guard case .image = content else {
@@ -181,56 +90,37 @@ struct MCPHostTests {
   }
 
   @Test
-  func testLongRunningOperation() async throws {
+  func testToolsWithProgress() async throws {
     let host = MCPHost(config: configuration)
 
     let connection = try await host.connect("everything", transport: everythingTransport)
 
-    await connection.fetch(.tools)
-    let toolsApi = await connection.tools
-    let tools = toolsApi.tools
+    await connection.refreshTools()
+    let tools = connection.tools
 
     #expect(tools.count > 0)
 
     var progressCalled = false
 
     // Progress notifications (TODO)
-    let longRunningResponse = try await toolsApi.call(
-      "longRunningOperation", arguments: [
+    let _ = try await connection.callTool(
+      "longRunningOperation",
+      arguments: [
         "duration": 5,
-        "step": 10
+        "step": 10,
       ]
     ) {
-      (a, b) in
-      print(a, b)
+      (current, total) in
+
       progressCalled = true
     }
 
     try await Task.sleep(for: .seconds(5))
-    print(progressCalled)
     #expect(progressCalled)
-
-    // Image
-    let imageResponse = try await toolsApi.call("getTinyImage", arguments: [:])
-
-    let imageContent = imageResponse.content.first { content in
-      guard case .image = content else {
-        return false
-      }
-
-      return true
-    }
-
-    guard case let .image(imageMessage) = imageContent else {
-      Issue.record("Expected binary content for image tool")
-      return
-    }
-
-    #expect(imageMessage.data.count > 0)
   }
 
   @Test
-  func testEverythingServerSampling() async throws {
+  func testSampling() async throws {
     let config = MCPConfiguration(
       roots: .list([]),
       sampling: .init(handler: { _ in
@@ -243,9 +133,7 @@ struct MCPHostTests {
 
     let connection = try await host.connect("everything", transport: everythingTransport)
 
-    let tools = await connection.tools
-
-    let sampleResponse = try await tools.call(
+    let sampleResponse = try await connection.callTool(
       "sampleLLM", arguments: ["prompt": "Hello, World!"])
     print(sampleResponse)
     #expect(sampleResponse.content.count > 0)
@@ -257,17 +145,14 @@ struct MCPHostTests {
 
     let connection = try await host.connect("test", transport: everythingTransport)
 
-    await connection.fetch(.resources)
+    await connection.refreshResources()
 
-    let resourceState = await connection.resources
+    #expect(connection.resources.count > 0)
 
-    print(resourceState.resources)
-    #expect(resourceState.resources.count > 0)
-
-    let textResource = try await resourceState.read("test://static/resource/1")
+    let textResource = try await connection.readResource("test://static/resource/1")
     #expect(textResource.contents.count > 0)
 
-    let binaryResource = try await resourceState.read("test://static/resource/2")
+    let binaryResource = try await connection.readResource("test://static/resource/2")
     #expect(binaryResource.contents.count > 0)
   }
 
@@ -277,20 +162,207 @@ struct MCPHostTests {
 
     let connection = try await host.connect("test", transport: everythingTransport)
 
-    await connection.fetch(.prompts)
+    await connection.refreshPrompts()
 
-    let promptState = await connection.prompts
-
-    let simplePrompt = try await promptState.get("simple_prompt")
+    let simplePrompt = try await connection.getPrompt("simple_prompt")
     #expect(simplePrompt.messages.count > 0)
 
-    let complexPrompt = try await promptState.get(
+    let complexPrompt = try await connection.getPrompt(
       "complex_prompt",
-      arguments: ["temperature": "72"]
+      arguments: ["temperature": "1"]
     )
     #expect(complexPrompt.messages.count > 0)
 
     print(complexPrompt)
     print(simplePrompt)
+  }
+
+  @Test("Host manages connection state")
+  func testConnectionStateManagement() async throws {
+    let host = MCPHost()
+
+    // Initial state
+    #expect(host.connections.isEmpty)
+
+    // Connect
+    let connection = try await host.connect("test", transport: everythingTransport)
+    #expect(host.connections.count == 1)
+    #expect(host.connections["test"]?.id == "test")
+    #expect(connection.status == .connected)
+    #expect(connection.isConnected)
+
+    // Verify initial feature state
+    #expect(connection.tools.isEmpty)
+    #expect(connection.resources.isEmpty)
+    #expect(connection.prompts.isEmpty)
+    #expect(!connection.isRefreshingTools)
+    #expect(!connection.isRefreshingResources)
+    #expect(!connection.isRefreshingPrompts)
+
+    // Refresh should populate features
+    await connection.refresh()
+    #expect(!connection.tools.isEmpty)
+    #expect(!connection.resources.isEmpty)
+    #expect(!connection.prompts.isEmpty)
+
+    // Disconnect
+    await host.disconnect(connection.id)
+    #expect(host.connections.isEmpty)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(!connection.isConnected)
+    #expect(connection.status == .disconnected)
+  }
+
+  @Test("Host aggregates tools across connections")
+  func testToolAggregation() async throws {
+    let host = MCPHost()
+
+    // Connect multiple servers
+    let conn1 = try await host.connect("test1", transport: everythingTransport)
+    let conn2 = try await host.connect("test2", transport: memoryTransport)
+
+    async let task1 = conn1.refresh()
+    async let task2 = conn2.refresh()
+    
+    let (_,_) = await (task1, task2)
+
+    // Should aggregate all unique tools
+    let allTools = host.availableTools
+    #expect(allTools.count > 0)
+    #expect(allTools.count >= conn1.tools.count)
+    #expect(allTools.count >= conn2.tools.count)
+
+    // Tool list should update when connections refresh
+    let initialCount = allTools.count
+    await conn1.refreshTools()
+    #expect(host.availableTools.count >= initialCount)
+  }
+
+  @Test("Host handles feature notifications")
+  func testFeatureNotifications() async throws {
+    let host = MCPHost()
+    let connection = try await host.connect("test", transport: everythingTransport)
+
+    // Initial refresh
+    await connection.refresh()
+    let initialTools = connection.tools
+
+    // Simulate tool list change notification
+    try await connection.client.emit(ToolListChangedNotification())
+    try await Task.sleep(for: .seconds(1))
+
+    // Connection state should be updated
+    #expect(connection.tools.count >= initialTools.count)
+
+    // Similar tests for resources and prompts
+    let initialResources = connection.resources
+    try await connection.client.emit(ResourceListChangedNotification())
+    try await Task.sleep(for: .seconds(1))
+    #expect(connection.resources.count >= initialResources.count)
+  }
+
+  @Test("Host manages progress updates")
+  func testProgressHandling() async throws {
+    let host = MCPHost()
+    let connection = try await host.connect("test", transport: everythingTransport)
+
+    await connection.refreshTools()
+    var progressUpdates: [(Double, Double?)] = []
+
+    // Long running operation with progress
+    let _ = try await connection.callTool(
+      "longRunningOperation",
+      arguments: ["duration": 2, "steps": 4],
+      progress: { progress, total in
+        progressUpdates.append((progress, total))
+      }
+    )
+
+    #expect(!progressUpdates.isEmpty)
+    #expect(progressUpdates.count >= 4)
+  }
+
+  @Test("Host handles connection errors")
+  func testConnectionErrorHandling() async throws {
+    let host = MCPHost()
+
+    // Bad transport that will fail
+    let badTransport = StdioTransport(
+      command: "invalid-command",
+      arguments: []
+    )
+
+    do {
+      _ = try await host.connect("test", transport: badTransport)
+      #expect(false, "Should have thrown")
+    } catch {
+      #expect(true)
+      #expect(host.connections.isEmpty)
+    }
+
+    // Test automatic state updates on connection failure
+    let connection = try await host.connect("test", transport: everythingTransport)
+    await connection.refresh()
+
+    // Force connection failure
+    await connection.client.stop()
+    try await Task.sleep(for: .seconds(1))
+
+    #expect(connection.status == .disconnected)
+    #expect(!connection.isConnected)
+    #expect(host.failedConnections.isEmpty)
+  }
+
+  @Test("Host handles client capability checks")
+  func testCapabilityChecks() async throws {
+    let host = MCPHost()
+    let connection = try await host.connect("test", transport: everythingTransport)
+
+    // Verify capability inference
+    let toolConns = host.connections(supporting: .tools)
+    #expect(!toolConns.isEmpty)
+    #expect(toolConns.contains(connection))
+
+    let resourceConns = host.connections(supporting: .resources)
+    #expect(!resourceConns.isEmpty)
+    #expect(resourceConns.contains(connection))
+
+    // Connection API should respect capabilities
+    await connection.refresh()
+    #expect(connection.capabilities.supports(.tools))
+    #expect(!connection.tools.isEmpty)
+
+    // Test capability changes
+    let noCapConn = ConnectionState(
+      id: "test2",
+      client: connection.client,
+      serverInfo: connection.serverInfo,
+      capabilities: .init()
+    )
+
+    await noCapConn.refreshTools()
+    #expect(noCapConn.tools.isEmpty)
+  }
+
+  @Test("Host monitors connection health")
+  func testHealthMonitoring() async throws {
+    let host = MCPHost()
+    let connection = try await host.connect("test", transport: everythingTransport)
+
+    // Initially active
+    #expect(host.inactiveConnections(timeout: 60).isEmpty)
+
+    // Force inactivity
+    let oldActivity = connection.lastActivity
+    try await Task.sleep(for: .seconds(2))
+
+    let inactive = host.inactiveConnections(timeout: 1)
+    #expect(!inactive.isEmpty)
+    #expect(inactive.first?.lastActivity == oldActivity)
+
+    // Activity updates on operations
+    await connection.refreshTools()
+    #expect(connection.lastActivity > oldActivity)
+    #expect(host.inactiveConnections(timeout: 1).isEmpty)
   }
 }

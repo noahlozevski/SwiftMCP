@@ -1,107 +1,28 @@
 import Foundation
 import OSLog
 
-public enum RootSource {
-  /// A static list of roots
-  case list([Root])
-
-  /// A dynamic list of roots
-  case dynamic(() -> [Root])
-}
-
-/// Configuration for filesystem roots
-public struct RootsConfig {
-  let source: RootSource
-  let autoUpdate: Bool
-
-  public static func list(_ roots: [Root]) -> Self {
-    .init(source: .list(roots), autoUpdate: false)
-  }
-
-  public static func dynamic(_ roots: @escaping () -> [Root]) -> Self {
-    .init(source: .dynamic(roots), autoUpdate: true)
-  }
-
-  var roots: [Root] {
-    switch source {
-    case .list(let roots): return roots
-    case .dynamic(let roots): return roots()
-    }
-  }
-}
-
-/// Configuration for AI model sampling
-public struct SamplingConfig {
-  /// Handler for sampling requests
-  public let handler: @Sendable (CreateMessageRequest) async throws -> CreateMessageResult
-
-  public init(
-    handler: @escaping @Sendable (CreateMessageRequest) async throws -> CreateMessageResult
-  ) {
-    self.handler = handler
-  }
-}
-
-public struct MCPConfiguration {
-  /// Broadcasted capabilities for all clients
-  public internal(set) var capabilities: ClientCapabilities
-
-  public var clientInfo: Implementation
-  /// Configuration for filesystem roots
-  public var roots: RootsConfig?
-
-  /// Configuration for AI model sampling
-  public var sampling: SamplingConfig?
-
-  var clientConfig: MCPClient.Configuration {
-    MCPClient.Configuration(
-      clientInfo: clientInfo,
-      capabilities: capabilities
-    )
-  }
-
-  public init(
-    roots: RootsConfig? = nil,
-    sampling: SamplingConfig? = nil,
-    clientInfo: Implementation = .defaultClient,
-    capabilities: ClientCapabilities = .init()
-  ) {
-    self.roots = roots
-    self.sampling = sampling
-    self.capabilities = capabilities
-    self.clientInfo = clientInfo
-
-    if roots != nil {
-      self.capabilities.roots = .init(listChanged: true)
-    }
-
-    if sampling != nil, !capabilities.supports(.sampling) {
-      self.capabilities.sampling = .init()
-    }
-
-    self.capabilities = capabilities
-  }
-}
-
 // MARK: - MCPHost Interface
 
 /// The primary interface for interacting with MCP servers
-public actor MCPHost {
+@Observable public final class MCPHost {
+  // Public state
+  public private(set) var connections: [String: ConnectionState] = [:]
+
+  // Configuration
   private var configuration: MCPConfiguration
-  private var connections: [String: ServerConnection] = [:]
   private var notificationTasks: [String: Task<Void, Never>] = [:]
 
-  /// Initialize an MCP host with the given configuration
   public init(config: MCPConfiguration = .init()) {
     self.configuration = config
   }
 
-  /// Connect to an MCP server using the provided transport
+  // MARK: - Connection Management
+
   @discardableResult
   public func connect(
     _ id: String,
     transport: MCPTransport
-  ) async throws -> MCPConnection {
+  ) async throws -> ConnectionState {
     let client = MCPClient(configuration: configuration.clientConfig)
 
     if let sampling = configuration.sampling {
@@ -116,112 +37,77 @@ public actor MCPHost {
       throw MCPError.internalError("Expected running state")
     }
 
-    let connection = MCPConnection(
+    let state = ConnectionState(
       id: id,
       client: client,
       serverInfo: sessionInfo.serverInfo,
       capabilities: sessionInfo.capabilities
     )
 
-    // Start notification handling
     notificationTasks[id] = Task { [weak self] in
       for await notification in client.notifications {
-        await self?.handleNotification(notification, for: id)
+        await self?.handleNotification(notification, for: state)
       }
     }
 
-    connections[id] = ServerConnection(connection: connection)
-
-    return connection
+    connections[id] = state
+    return state
   }
 
-  public func disconnect(_ id: MCPConnection.ID) async {
-    guard let connection = connections[id] else { return }
-
-    await connection.connection.disconnect()
+  public func disconnect(_ id: String) async {
+    guard let state = connections[id] else { return }
+    await state.client.stop()
     connections[id] = nil
     notificationTasks[id] = nil
   }
 
-  public func disconnect(_ connection: MCPConnection) async {
-    await disconnect(connection.id)
+  // MARK: - Capability Management
+
+  /// Find all available tools across connections
+  public var availableTools: [MCPTool] {
+    Array(Set(connections.values.flatMap { $0.tools }))
   }
 
-  /// Get all active connections
-  public var activeConnections: [MCPConnection] {
-    get async {
-      Array(connections.values.map { $0.connection })
-    }
+  /// Find connections supporting specific capabilities
+  public func connections(supporting feature: ServerCapabilities.Features) -> [ConnectionState] {
+    connections.values.filter { $0.capabilities.supports(feature) }
   }
 
-  /// Get a specific connection by ID
-  public func connection(id: MCPConnection.ID) async -> MCPConnection? {
-    connections[id]?.connection
+  // MARK: - Health Monitoring
+
+  /// Get connections that haven't had activity within timeout
+  public func inactiveConnections(timeout: TimeInterval) -> [ConnectionState] {
+    let cutoff = Date().addingTimeInterval(-timeout)
+    return connections.values.filter { $0.lastActivity < cutoff }
   }
 
-  /// Update the roots configuration
-  public func updateRoots(_ config: RootsConfig?) async {
-    configuration.roots = config
-
-    if config != nil {
-      configuration.capabilities.roots = .init(listChanged: true)
-    } else {
-      configuration.capabilities.roots = nil
-    }
-
-    await withTaskGroup(of: Void.self) { group in
-      for connection in connections.values {
-        group.addTask {
-          try? await connection.connection.updateRoots(config)
-        }
-      }
-    }
+  /// Check if any connections are in a failed state
+  public var hasFailedConnections: Bool {
+    connections.values.contains { $0.status == .failed }
   }
 
-  /// Update the sampling configuration
-  public func updateSampling(_ config: SamplingConfig?) async {
-    configuration.sampling = config
-    // Update existing connections
+  /// Get all failed connections
+  public var failedConnections: [ConnectionState] {
+    connections.values.filter { $0.status == .failed }
   }
 
   // MARK: - Private
 
-  private struct ServerConnection {
-    let connection: MCPConnection
-    var resources: [MCPResource] = []
-    var prompts: [MCPPrompt] = []
-    var tools: [MCPTool] = []
-  }
-
   private func handleNotification(
     _ notification: any MCPNotification,
-    for id: MCPConnection.ID
+    for state: ConnectionState
   ) async {
-    guard var serverConnection = connections[id] else { return }
-
-    let connection = serverConnection.connection
     switch notification {
     case is ToolListChangedNotification:
-      let toolState = await connection.tools
-      await toolState.refresh()
-      serverConnection.tools = toolState.tools
+      await state.refreshTools()
     case is ResourceListChangedNotification:
-      let resourceState = await connection.resources
-      await resourceState.refresh()
-      serverConnection.resources = resourceState.resources
+      await state.refreshResources()
     case is PromptListChangedNotification:
-      let promptState = await connection.prompts
-      await promptState.refresh()
-      serverConnection.prompts = promptState.prompts
-    case let resourceUpdate as ResourceUpdatedNotification:
-      let resourceState = await connection.resources
-      // TODO: broadcast uri update?
-      await resourceState.refresh()
-      serverConnection.resources = resourceState.resources
+      await state.refreshPrompts()
+    case is ResourceUpdatedNotification:
+      await state.refreshResources()
     default:
       break
     }
-
-    connections[id] = serverConnection
   }
 }

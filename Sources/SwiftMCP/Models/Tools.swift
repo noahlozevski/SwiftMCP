@@ -7,6 +7,16 @@ public struct MCPTool: Codable, Sendable {
     public let inputSchema: Schema
 }
 
+extension MCPTool: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+    }
+}
+
+extension MCPTool: Identifiable {
+    public var id: String { name }
+}
+
 public struct CallToolRequest: MCPRequest {
     public static let method = "tools/call"
     public typealias Response = CallToolResult
