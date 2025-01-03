@@ -2,7 +2,7 @@ import Foundation
 
 extension JSONRPCMessage {
     /// Validates that the message follows JSON-RPC and MCP constraints.
-    public func validate() throws {
+    func validate() throws {
         guard jsonrpcVersion == "2.0" else {
             throw MCPError.invalidRequest("Unsupported JSON-RPC version")
         }
@@ -34,7 +34,7 @@ extension JSONRPCMessage {
         }
     }
 
-    private func validateRequest(_ request: Request) throws {
+    private func validateRequest(_ request: any MCPRequest) throws {
         guard !type(of: request).method.isEmpty else {
             throw MCPError.invalidRequest("Method cannot be empty")
         }
@@ -46,7 +46,7 @@ extension JSONRPCMessage {
         }
     }
 
-    private func validateNotification(_ notification: MCPNotification) throws {
+    private func validateNotification(_ notification: any MCPNotification) throws {
         guard !type(of: notification).method.isEmpty else {
             throw MCPError.invalidRequest("Method cannot be empty")
         }

@@ -44,11 +44,13 @@ public struct SamplingMessage: Codable, Sendable {
         }
     }
 }
+
 public struct CreateMessageRequest: MCPRequest {
     public static let method = "sampling/createMessage"
     public typealias Response = CreateMessageResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let includeContext: String?
         public let maxTokens: Int
         public let messages: [SamplingMessage]
@@ -59,16 +61,19 @@ public struct CreateMessageRequest: MCPRequest {
         public let temperature: Double?
     }
 
-    public var params: Encodable? { internalParams }
-
-    private var internalParams: Params
+    public var params: Params
 
     public init(
-        maxTokens: Int, messages: [SamplingMessage], includeContext: String? = nil,
-        metadata: [String: AnyCodable]? = nil, modelPreferences: ModelPreferences? = nil,
-        stopSequences: [String]? = nil, systemPrompt: String? = nil, temperature: Double? = nil
+        maxTokens: Int,
+        messages: [SamplingMessage],
+        includeContext: String? = nil,
+        metadata: [String: AnyCodable]? = nil,
+        modelPreferences: ModelPreferences? = nil,
+        stopSequences: [String]? = nil,
+        systemPrompt: String? = nil,
+        temperature: Double? = nil
     ) {
-        self.internalParams = Params(
+        self.params = Params(
             includeContext: includeContext, maxTokens: maxTokens, messages: messages,
             metadata: metadata, modelPreferences: modelPreferences, stopSequences: stopSequences,
             systemPrompt: systemPrompt, temperature: temperature)
@@ -78,7 +83,7 @@ public struct CreateMessageRequest: MCPRequest {
 public struct CreateMessageResult: MCPResponse {
     public typealias Request = CreateMessageRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let content: CreateMessageContentVariant
     public let model: String
     public let role: Role

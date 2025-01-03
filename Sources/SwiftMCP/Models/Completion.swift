@@ -4,7 +4,8 @@ public struct CompleteRequest: MCPRequest {
     public static let method = "completion/complete"
     public typealias Response = CompleteResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let argument: Argument
         public let ref: Reference
 
@@ -43,21 +44,19 @@ public struct CompleteRequest: MCPRequest {
 
         public struct PromptRef: Codable, Sendable {
             public let name: String
-            public let type = "ref/prompt"
+            public var type = "ref/prompt"
         }
 
         public struct ResourceRef: Codable, Sendable {
             public let uri: String
-            public let type = "ref/resource"
+            public var type = "ref/resource"
         }
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(argument: Params.Argument, ref: Params.Reference) {
-        self.internalParams = Params(argument: argument, ref: ref)
+        self.params = Params(argument: argument, ref: ref)
     }
 }
 
@@ -71,5 +70,10 @@ public struct CompleteResult: MCPResponse {
     }
 
     public let completion: Completion
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
+
+    public init(completion: Completion, meta: [String: AnyCodable]?) {
+        self.completion = completion
+        self._meta = meta
+    }
 }

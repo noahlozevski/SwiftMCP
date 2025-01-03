@@ -32,7 +32,11 @@ public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
     public let value: Any
 
     public init(_ value: Any) {
-        self.value = value
+        if let value = value as? AnyCodable {
+            self.value = value.value
+        } else {
+            self.value = value
+        }
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +62,8 @@ public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch value {
+        case let codable as AnyCodable: try container.encode(codable)
+        case let encValue as any Encodable: try container.encode(encValue)
         case let boolValue as Bool: try container.encode(boolValue)
         case let intValue as Int: try container.encode(intValue)
         case let doubleValue as Double: try container.encode(doubleValue)
@@ -73,7 +79,11 @@ public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
     }
 
     public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
-        switch (lhs.value, rhs.value) {
+        // Unwrap AnyCodable values before comparison
+        let lhsValue = (lhs.value as? AnyCodable)?.value ?? lhs.value
+        let rhsValue = (rhs.value as? AnyCodable)?.value ?? rhs.value
+
+        switch (lhsValue, rhsValue) {
         case (let lhs as Bool, let rhs as Bool):
             return lhs == rhs
         case (let lhs as Int, let rhs as Int):
@@ -91,6 +101,10 @@ public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
         default:
             return false
         }
+    }
+
+    var data: Data? {
+        try? JSONEncoder().encode(self)
     }
 }
 

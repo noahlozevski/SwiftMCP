@@ -32,30 +32,99 @@ extension MCPMessage {
   }
 }
 
+public struct EmptyParams: MCPRequestParams {
+  public var _meta: RequestMeta?
+}
+
+public struct RequestMeta: Codable, Sendable {
+  var progressToken: ProgressToken?
+}
+
+// Base params interface matching schema
+public protocol MCPRequestParams: Codable, Sendable {
+  var _meta: RequestMeta? { get set }
+}
+
 /// Protocol for request messages.
 ///
 /// Conforming types specify a request method, associated response type, and parameters.
 public protocol MCPRequest: MCPMessage {
   associatedtype Response: MCPResponse where Response.Request == Self
+  associatedtype Params: MCPRequestParams = EmptyParams
 
   /// The JSON-RPC method name for this request.
   static var method: String { get }
 
   /// The request parameters, if any.
-  var params: Encodable? { get }
+  var params: Params { get set }
 }
 
 /// Protocol for response messages
 public protocol MCPResponse: MCPMessage {
   /// The request type this response corresponds to
   associatedtype Request: MCPRequest where Request.Response == Self
+
+  var _meta: [String: AnyCodable]? { get set }
 }
 
 /// Protocol for notification messages
 public protocol MCPNotification: MCPMessage {
+  associatedtype Params: Codable = EmptyParams
   /// The method name for this notification
   static var method: String { get }
 
   /// The parameters for this notification, if any
-  var params: Encodable? { get }
+  var params: Params { get }
+}
+
+public enum MCPServerRequest: Codable {
+  case listRoots(ListRootsRequest)
+  case createMessage(CreateMessageRequest)
+  case ping(PingRequest)
+}
+
+public enum MCPClientRequest: Codable {
+  case listPrompts(ListPromptsRequest)
+  case listTools(ListToolsRequest)
+  case callTool(CallToolRequest)
+  case setLoggingLevel(SetLevelRequest)
+  case listResources(ListResourcesRequest)
+  case subscribe(SubscribeRequest)
+  case unsubscribe(UnsubscribeRequest)
+  case listResourceTemplates(ListResourceTemplatesRequest)
+  case readResource(ReadResourceRequest)
+  case ping(PingRequest)
+
+  var request: any MCPRequest {
+    switch self {
+    case .listPrompts(let request):
+      return request
+    case .listTools(let request):
+      return request
+    case .callTool(let request):
+      return request
+    case .setLoggingLevel(let request):
+      return request
+    case .listResources(let request):
+      return request
+    case .subscribe(let request):
+      return request
+    case .unsubscribe(let request):
+      return request
+    case .listResourceTemplates(let request):
+      return request
+    case .readResource(let request):
+      return request
+    case .ping(let request):
+      return request
+    }
+  }
+}
+
+extension MCPNotification {
+  public var params: EmptyParams { EmptyParams() }
+}
+
+extension MCPRequest {
+  public var params: EmptyParams { EmptyParams() }
 }

@@ -36,7 +36,7 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<InitializeRequest>.self, from: initializeRequestJSON)
+            JSONRPCMessage.self, from: initializeRequestJSON)
 
         guard case .request(let id, let req) = message else {
             Issue.record("Expected a request message")
@@ -88,9 +88,11 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<InitializeRequest>.self, from: initializeResponseJSON)
+            JSONRPCMessage.self, from: initializeResponseJSON)
 
-        guard case .response(let id, let resp) = message else {
+      guard case .response(let id, let resp) = message,
+            let resp = try? JSONDecoder().decode(InitializeResult.self, from: resp.data!)
+        else {
             Issue.record("Expected a response message")
             return
         }
@@ -120,7 +122,7 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<ListResourcesRequest>.self,
+            JSONRPCMessage.self,
             from: listResourcesRequestJSON)
 
         guard case .request(_, let req) = message else {
@@ -161,10 +163,12 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<ListResourcesRequest>.self,
+            JSONRPCMessage.self,
             from: listResourcesResponseJSON)
 
-        guard case .response(_, let resp) = message else {
+        guard case .response(_, let resp) = message,
+              let resp = try? JSONDecoder().decode(ListResourcesResult.self, from: resp.data!)
+        else {
             Issue.record("Expected a response message")
             return
         }
@@ -194,7 +198,7 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<CallToolRequest>.self, from: callToolRequestJSON)
+            JSONRPCMessage.self, from: callToolRequestJSON)
 
         guard case .request(_, let req) = message else {
             Issue.record("Expected a request message")
@@ -203,7 +207,7 @@ struct MCPSerializationTests {
 
         let params = try #require(req.params) as! CallToolRequest.Params
         try #require(params.name == "get_weather")
-        try #require((params.arguments["location"]?.value as? String) == "New York")
+      #expect((params.arguments["location"]?.value as? String) == "New York")
     }
 
     @Test("Decode Call Tool Result")
@@ -226,9 +230,11 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<CallToolRequest>.self, from: callToolResultJSON)
+            JSONRPCMessage.self, from: callToolResultJSON)
 
-        guard case .response(_, let resp) = message else {
+      guard case .response(_, let resp) = message,
+            let resp = try? JSONDecoder().decode(CallToolResult.self, from: resp.data!)
+      else {
             Issue.record("Expected a response message")
             return
         }
@@ -257,7 +263,7 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<InitializeRequest>.self,
+            JSONRPCMessage.self,
             from: cancelledNotificationJSON)
 
         guard case .notification(let notif) = message else {
@@ -290,7 +296,7 @@ struct MCPSerializationTests {
 
         let decoder = JSONDecoder()
         let message = try decoder.decode(
-            JSONRPCMessage<InitializeRequest>.self,
+            JSONRPCMessage.self,
             from: promptListChangedNotificationJSON)
 
         guard case .notification(let notif) = message else {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Root definition
-public struct Root: Codable, Sendable {
+public struct Root: Codable, Sendable, Equatable {
     public let uri: String
     public let name: String?
 }
@@ -10,21 +10,28 @@ public struct ListRootsRequest: MCPRequest {
     public static var method = "roots/list"
     public typealias Response = ListRootsResult
 
-    public struct Params: Codable, Sendable {
-        public let _meta: [String: AnyCodable]?
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
     }
-    public var params: Encodable? { internalParams }
 
-    private let internalParams: Params?
+    public var params: Params
 
-    public init() {
-        self.internalParams = nil
+    public init(meta: RequestMeta? = nil) {
+        self.params = Params(_meta: meta)
     }
 }
 
 public struct ListRootsResult: MCPResponse {
     public typealias Request = ListRootsRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let roots: [Root]
+
+    public init(
+        roots: [Root],
+        meta: [String: AnyCodable]? = nil
+    ) {
+        self.roots = roots
+        self._meta = meta
+    }
 }

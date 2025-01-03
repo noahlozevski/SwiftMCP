@@ -102,8 +102,8 @@ public actor StdioTransport: MCPTransport {
       self.messagesContinuation = continuation
 
       // Auto-start if needed
-      Task {
-        if self.state == .disconnected {
+      if self.state == .disconnected {
+        Task {
           do {
             try await self.start()
           } catch {
@@ -111,9 +111,6 @@ public actor StdioTransport: MCPTransport {
             return
           }
         }
-
-        // Begin reading messages
-        await self.readMessages()
       }
 
       continuation.onTermination = { [weak self] _ in
@@ -136,7 +133,7 @@ public actor StdioTransport: MCPTransport {
 
     self.state = .connected
 
-    Task {
+    processTask = Task {
       await withTaskGroup(of: Void.self) { group in
         group.addTask {
           await self.monitorStdErr()
@@ -145,15 +142,12 @@ public actor StdioTransport: MCPTransport {
         group.addTask {
           await self.readMessages()
         }
-
-        group.addTask {
-          self.process.waitUntilExit()
-        }
       }
     }
   }
 
-  public func stop() async {
+  public func stop() {
+    closeHandles()
     processTask?.cancel()
     process.terminate()
     state = .disconnected
@@ -173,29 +167,40 @@ public actor StdioTransport: MCPTransport {
     var messageData = data
 
     logger.debug("Sending message: \(String(data: data, encoding: .utf8) ?? "", privacy: .public)")
-    messageData.append(0x0A)  // Append newline
+    messageData.append(0x0A)
 
     inputPipe.fileHandleForWriting.write(messageData)
   }
 
-  /// Monitor process stderr for errors
   private func monitorStdErr() async {
-    for try await line in errorPipe.bytes.lines {
+    for await line in errorPipe.bytes.lines {
       // Log but don't fail - some MCP servers use stderr for logging
       logger.info("[SERVER] \(line)")
     }
   }
 
-  /// Read messages from process stdout
   private func readMessages() async {
-    for try await data in outputPipe.bytes.lines {
-      guard !Task.isCancelled, let data = data.data(using: .utf8) else {
-        break
+    do {
+      for try await data in outputPipe.bytes.lines {
+        try Task.checkCancellation()
+        guard let data = data.data(using: .utf8) else {
+          break
+        }
+        messagesContinuation?.yield(data)
       }
-      messagesContinuation?.yield(data)
+    } catch {
+      logger.error("Error reading messages: \(error)")
+      stop()
     }
     messagesContinuation?.finish()
   }
+
+  private func closeHandles() {
+    inputPipe.fileHandleForWriting.closeFile()
+    outputPipe.fileHandleForReading.closeFile()
+    errorPipe.fileHandleForReading.closeFile()
+  }
+
 }
 
 extension Pipe {

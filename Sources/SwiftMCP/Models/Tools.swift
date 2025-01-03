@@ -4,14 +4,15 @@ import Foundation
 public struct MCPTool: Codable, Sendable {
     public let name: String
     public let description: String?
-    public let inputSchema: JSONSchema
+    public let inputSchema: Schema
 }
 
 public struct CallToolRequest: MCPRequest {
     public static let method = "tools/call"
     public typealias Response = CallToolResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let name: String
         public let arguments: [String: AnyCodable]
 
@@ -20,12 +21,11 @@ public struct CallToolRequest: MCPRequest {
             self.arguments = arguments ?? [:]
         }
     }
-    public var params: Encodable? { internalParams }
 
-    private let internalParams: Params
+    public var params: Params
 
-    public init(name: String, arguments: [String: AnyCodable]? = nil) {
-        self.internalParams = Params(name: name, arguments: arguments)
+    public init(name: String, arguments: [String: Any]? = nil) {
+        self.params = Params(name: name, arguments: arguments?.mapValues(AnyCodable.init))
     }
 }
 
@@ -34,13 +34,13 @@ public struct CallToolResult: MCPResponse {
 
     public let content: [ToolContent]
     public let isError: Bool?
-    public let meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
 }
 
 public enum ToolContent: Codable, Sendable {
     case text(TextContent)
     case image(ImageContent)
-    case resource(EmbeddedResource)
+    case resource(EmbeddedResourceContent)
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -49,7 +49,7 @@ public enum ToolContent: Codable, Sendable {
         } else if let image = try? container.decode(ImageContent.self), image.type == "image" {
             self = .image(image)
         } else if let resource = try? container.decode(
-            EmbeddedResource.self
+            EmbeddedResourceContent.self
         ), resource.type == "resource" {
             self = .resource(resource)
         } else {
@@ -71,23 +71,22 @@ public struct ListToolsRequest: MCPRequest {
     public static let method = "tools/list"
     public typealias Response = ListToolsResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let cursor: String?
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(cursor: String? = nil) {
-        self.internalParams = Params(cursor: cursor)
+        self.params = Params(cursor: cursor)
     }
 }
 
 public struct ListToolsResult: MCPResponse {
     public typealias Request = ListToolsRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let tools: [MCPTool]
     public let nextCursor: String?
 }

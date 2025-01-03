@@ -2,10 +2,13 @@ import Foundation
 
 /// A sample request/response pair for the "initialize" method as per the schema.
 public struct InitializeRequest: MCPRequest {
+    public var params: Params
+
     public static let method = "initialize"
     public typealias Response = InitializeResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let capabilities: ClientCapabilities
         public let clientInfo: Implementation
         public let protocolVersion: String
@@ -19,12 +22,8 @@ public struct InitializeRequest: MCPRequest {
         }
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
-
     public init(params: Params) {
-        self.internalParams = params
+        self.params = params
     }
 }
 
@@ -34,7 +33,7 @@ public struct InitializeResult: MCPResponse, Equatable {
     public let protocolVersion: String
     public let serverInfo: Implementation
     public let instructions: String?
-    public let meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
 
     public init(
         capabilities: ServerCapabilities,
@@ -47,7 +46,7 @@ public struct InitializeResult: MCPResponse, Equatable {
         self.protocolVersion = protocolVersion
         self.serverInfo = serverInfo
         self.instructions = instructions
-        self.meta = meta
+        self._meta = meta
     }
 
     public static func == (lhs: InitializeResult, rhs: InitializeResult) -> Bool {
@@ -58,9 +57,9 @@ public struct InitializeResult: MCPResponse, Equatable {
 }
 
 public struct ClientCapabilities: Codable, Sendable {
-    public let experimental: [String: [String: AnyCodable]]?
-    public let roots: RootsCapability?
-    public let sampling: [String: AnyCodable]?
+    public var experimental: [String: [String: AnyCodable]]?
+    public var roots: RootsCapability?
+    public var sampling: [String: AnyCodable]?
 
     public struct RootsCapability: Codable, Sendable, Equatable {
         public let listChanged: Bool?
@@ -136,14 +135,19 @@ public struct Implementation: Codable, Sendable, Equatable {
         self.name = name
         self.version = version
     }
+
+    public static let defaultClient = Implementation(
+        name: Bundle.main.bundleIdentifier ?? "SwiftMCP",
+        version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    )
 }
 
 public struct ServerCapabilities: Codable, Sendable {
-    public let experimental: [String: [String: AnyCodable]]?
-    public let logging: [String: AnyCodable]?
-    public let prompts: PromptsCapability?
-    public let resources: ResourcesCapability?
-    public let tools: ToolsCapability?
+    public var experimental: [String: [String: AnyCodable]]?
+    public var logging: [String: AnyCodable]?
+    public var prompts: PromptsCapability?
+    public var resources: ResourcesCapability?
+    public var tools: ToolsCapability?
 
     public struct PromptsCapability: Codable, Sendable, Equatable {
         public let listChanged: Bool?
@@ -217,7 +221,12 @@ extension ServerCapabilities {
 
         public static let tools = Features(rawValue: 1 << 0)
         public static let resources = Features(rawValue: 1 << 1)
-        public static let prompts = Features(rawValue: 1 << 2)
+        public static let resourceListChanged = Features(rawValue: 1 << 2)
+        public static let resourceSubscribe = Features(rawValue: 1 << 3)
+        public static let prompts = Features(rawValue: 1 << 4)
+        public static let promptListChanged = Features(rawValue: 1 << 5)
+
+        public static let logging = Features(rawValue: 1 << 6)
 
         public init(rawValue: Int) {
             self.rawValue = rawValue
@@ -227,8 +236,24 @@ extension ServerCapabilities {
     public var supportedFeatures: Features {
         var features = Features()
         if tools != nil { features.insert(.tools) }
-        if resources != nil { features.insert(.resources) }
-        if prompts != nil { features.insert(.prompts) }
+        if let resources {
+            features.insert(.resources)
+
+            if resources.listChanged != nil {
+                features.insert(.resourceListChanged)
+            }
+
+            if resources.subscribe != nil {
+                features.insert(.resourceSubscribe)
+            }
+        }
+        if let prompts {
+            features.insert(.prompts)
+
+            if prompts.listChanged != nil {
+                features.insert(.promptListChanged)
+            }
+        }
         return features
     }
 

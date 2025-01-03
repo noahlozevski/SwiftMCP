@@ -1,10 +1,10 @@
 import Foundation
 
-public enum NotificationFactory {
-    public static func makeNotification(
+enum NotificationFactory {
+    static func makeNotification(
         method: String,
         params: [String: AnyCodable]?
-    ) -> MCPNotification? {
+    ) -> (any MCPNotification)? {
         switch method {
         case CancelledNotification.method:
             if let params = decodeParams(CancelledNotification.Params.self, from: params) {
@@ -19,7 +19,7 @@ public enum NotificationFactory {
         case ProgressNotification.method:
             if let params = decodeParams(ProgressNotification.Params.self, from: params) {
                 return ProgressNotification(
-                    progress: params.progress, progressToken: params.progressToken.value,
+                    progress: params.progress, progressToken: params.progressToken,
                     total: params.total)
             }
         case RootsListChangedNotification.method:

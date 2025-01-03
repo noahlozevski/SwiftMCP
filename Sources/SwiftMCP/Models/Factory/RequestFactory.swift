@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RequestFactory {
+enum RequestFactory {
   // We'll handle all client and server requests defined:
   // ClientRequests:
   // initialize, ping, prompts/list, prompts/get, resources/list, resources/read,
@@ -9,7 +9,7 @@ public enum RequestFactory {
   // server requests:
   // roots/list, sampling/createMessage
 
-  public static func makeRequest(
+  static func makeRequest(
     method: String,
     params: [String: AnyCodable]?
   ) -> (any MCPRequest)? {
@@ -89,5 +89,4 @@ public enum RequestFactory {
     }
     return nil
   }
-
 }

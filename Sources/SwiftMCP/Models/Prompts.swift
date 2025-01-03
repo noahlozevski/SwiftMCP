@@ -78,22 +78,22 @@ public struct ListPromptsRequest: MCPRequest {
     public static let method = "prompts/list"
     public typealias Response = ListPromptsResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let cursor: String?
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(cursor: String? = nil) {
-        self.internalParams = Params(cursor: cursor)
+        self.params = Params(cursor: cursor)
     }
 }
 
 public struct ListPromptsResult: MCPResponse {
     public typealias Request = ListPromptsRequest
 
+    public var _meta: [String: AnyCodable]?
     public let prompts: [MCPPrompt]
     public let nextCursor: String?
     public let metadata: [String: AnyCodable]?
@@ -113,24 +113,23 @@ public struct GetPromptRequest: MCPRequest {
     public static let method = "prompts/get"
     public typealias Response = GetPromptResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let name: String
         public let arguments: [String: String]?
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(name: String, arguments: [String: String]? = nil) {
-        self.internalParams = Params(name: name, arguments: arguments)
+        self.params = Params(name: name, arguments: arguments)
     }
 }
 
 public struct GetPromptResult: MCPResponse {
     public typealias Request = GetPromptRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let description: String?
     public let messages: [PromptMessage]
 

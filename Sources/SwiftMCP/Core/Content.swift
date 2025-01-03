@@ -2,22 +2,16 @@ import Foundation
 
 public struct TextContent: Codable, Sendable {
     public let text: String
-    public let type: String = "text"
+    public var type: String = "text"
     public let annotations: Annotations?
 }
 
 public struct ImageContent: Codable, Sendable {
     public let data: String
     public let mimeType: String
-    public let type: String = "image"
+    public var type: String = "image"
     public let annotations: Annotations?
 
-}
-
-public struct EmbeddedResource: Codable, Sendable {
-    public let type: String = "resource"
-    public let resource: TextResourceContents  // or BlobResourceContents
-    public let annotations: Annotations?
 }
 
 public enum Role: String, Codable, Sendable {
@@ -45,6 +39,7 @@ public struct BlobResourceContents: Codable, Sendable {
 public enum ResourceContentVariant: Codable, Sendable {
     case text(TextResourceContents)
     case blob(BlobResourceContents)
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         // Try text first:
@@ -77,7 +72,7 @@ public enum ResourceContentVariant: Codable, Sendable {
 }
 
 public struct EmbeddedResourceContent: Codable, Sendable {
-    public let type: String = "resource"
+    public var type: String = "resource"
     public let annotations: Annotations?
     public let resource: ResourceContentVariant
 }

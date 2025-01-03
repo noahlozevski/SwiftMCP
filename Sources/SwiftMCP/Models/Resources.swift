@@ -11,15 +11,15 @@ public struct ListResourcesRequest: MCPRequest {
     public static let method = "resources/list"
     public typealias Response = ListResourcesResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let cursor: String?
     }
-    public var params: Encodable? { internalParams }
 
-    private let internalParams: Params
+    public var params: Params
 
     public init(cursor: String? = nil) {
-        self.internalParams = Params(cursor: cursor)
+        self.params = Params(cursor: cursor)
     }
 }
 
@@ -28,23 +28,22 @@ public struct ListResourcesResult: MCPResponse {
 
     public let resources: [MCPResource]
     public let nextCursor: String?
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
 }
 
 public struct ListResourceTemplatesRequest: MCPRequest {
     public static let method = "resources/templates/list"
     public typealias Response = ListResourceTemplatesResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let cursor: String?
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(cursor: String? = nil) {
-        self.internalParams = Params(cursor: cursor)
+        self.params = Params(cursor: cursor)
     }
 }
 
@@ -60,7 +59,7 @@ public struct ResourceTemplate: Codable, Sendable {
 public struct ListResourceTemplatesResult: MCPResponse {
     public typealias Request = ListResourceTemplatesRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let resourceTemplates: [ResourceTemplate]
     public let nextCursor: String?
 }
@@ -69,16 +68,15 @@ public struct ReadResourceRequest: MCPRequest {
     public static let method = "resources/read"
     public typealias Response = ReadResourceResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let uri: String
     }
 
-    public var params: Encodable? { internalParams }
-
-    private let internalParams: Params
+    public var params: Params
 
     public init(uri: String) {
-        self.internalParams = Params(uri: uri)
+        self.params = Params(uri: uri)
     }
 }
 public enum ResourceContentsVariant: Codable, Sendable {
@@ -112,7 +110,7 @@ public enum ResourceContentsVariant: Codable, Sendable {
 public struct ReadResourceResult: MCPResponse {
     public typealias Request = ReadResourceRequest
 
-    public let _meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let contents: [ResourceContentsVariant]
 }
 
@@ -120,19 +118,20 @@ public struct SubscribeRequest: MCPRequest {
     public static var method = "resources/subscribe"
     public typealias Response = EmptyResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let uri: String
     }
-    public var params: Encodable? { internalParams }
 
-    private let internalParams: Params
+    public var params: Params
 
     public init(uri: String) {
-        self.internalParams = Params(uri: uri)
+        self.params = Params(uri: uri)
     }
 
     public struct EmptyResult: MCPResponse {
         public typealias Request = SubscribeRequest
+        public var _meta: [String: AnyCodable]?
     }
 }
 
@@ -140,18 +139,19 @@ public struct UnsubscribeRequest: MCPRequest {
     public static var method = "resources/unsubscribe"
     public typealias Response = EmptyResult
 
-    public struct Params: Codable, Sendable {
+    public struct Params: MCPRequestParams {
+        public var _meta: RequestMeta?
         public let uri: String
     }
-    public var params: Encodable? { internalParams }
 
-    private let internalParams: Params
+    public var params: Params
 
     public init(uri: String) {
-        self.internalParams = Params(uri: uri)
+        self.params = Params(uri: uri)
     }
 
     public struct EmptyResult: MCPResponse {
         public typealias Request = UnsubscribeRequest
+        public var _meta: [String: AnyCodable]?
     }
 }

@@ -8,7 +8,7 @@ public protocol MCPEndpointProtocol: Actor {
   var state: MCPEndpointState<SessionInfo> { get }
 
   /// Stream of notifications from this endpoint
-  var notifications: AsyncStream<MCPNotification> { get }
+  var notifications: AsyncStream<any MCPNotification> { get }
 
   /// Start the endpoint with the given transport
   func start(_ transport: MCPTransport) async throws

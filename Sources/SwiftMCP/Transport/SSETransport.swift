@@ -33,6 +33,11 @@ public actor SSETransport: MCPTransport {
                 if self.state == .disconnected {
                     do {
                         try await self.start()
+                        throw TransportError.connectionFailed(
+                            TransportError.invalidState(
+                                "Transport not connected"
+                            )
+                        )
                     } catch {
                         continuation.finish(throwing: error)
                         return
@@ -57,9 +62,10 @@ public actor SSETransport: MCPTransport {
         }
 
         // TODO: implement
+
     }
 
-    public func stop() async {
+    public func stop() {
         eventSource?.cancel()
         eventSource = nil
         messagesContinuation?.finish()

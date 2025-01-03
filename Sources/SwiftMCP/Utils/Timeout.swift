@@ -3,7 +3,7 @@ import Foundation
 // kudos https://forums.swift.org/t/running-an-async-task-with-a-timeout/49733/38
 
 // Based on: https://forums.swift.org/t/running-an-async-task-with-a-timeout/49733/21
-public struct TimedOutError: Error, Equatable {}
+struct TimedOutError: Error, Equatable {}
 
 /// Execute an operation in the current task subject to a timeout.
 ///
@@ -16,7 +16,7 @@ public struct TimedOutError: Error, Equatable {}
 /// - Returns: The result of `operation` if it completed in time.
 /// - Throws: Throws ``TimedOutError`` if the timeout expires before `operation` completes.
 ///   If `operation` throws an error before the timeout expires, that error is propagated to the caller.
-public func with<Return: Sendable, C: Clock>(
+func with<Return: Sendable, C: Clock>(
     timeout: C.Instant.Duration,
     tolerance: C.Instant.Duration? = nil,
     clock: C,
@@ -54,7 +54,7 @@ public func with<Return: Sendable, C: Clock>(
 /// - Returns: The result of `operation` if it completed in time.
 /// - Throws: Throws ``TimedOutError`` if the timeout expires before `operation` completes.
 ///   If `operation` throws an error before the timeout expires, that error is propagated to the caller.
-public func with<Return: Sendable>(
+func with<Return: Sendable>(
     timeout: ContinuousClock.Instant.Duration,
     tolerance: ContinuousClock.Instant.Duration? = nil,
     operation: @escaping @Sendable () async throws -> Return
