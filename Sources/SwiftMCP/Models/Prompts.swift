@@ -1,7 +1,7 @@
 import Foundation
 
 public struct MCPPrompt: Codable, Sendable, Hashable, Identifiable {
-    public var id: String { name + (arguments?.map(\.name) ?? []).joined() }
+    public var id: String { name }
 
     public let name: String
     public let description: String?
@@ -77,12 +77,12 @@ public struct PromptMessage: Codable, Sendable, Hashable {
     }
 }
 
-public struct ListPromptsRequest: MCPRequest, Sendable, Hashable {
+public struct ListPromptsRequest: MCPRequest, Sendable {
     public static let method = "prompts/list"
     public typealias Response = ListPromptsResult
 
-    public struct Params: MCPRequestParams, Sendable, Hashable {
-        public var meta: RequestMeta?
+    public struct Params: MCPRequestParams, Sendable {
+        public var _meta: RequestMeta?
         public let cursor: String?
     }
 
@@ -93,13 +93,12 @@ public struct ListPromptsRequest: MCPRequest, Sendable, Hashable {
     }
 }
 
-public struct ListPromptsResult: MCPResponse, Sendable {
+public struct ListPromptsResult: MCPResponse {
     public typealias Request = ListPromptsRequest
 
-    public var meta: [String: AnyCodable]?
+    public var _meta: [String: AnyCodable]?
     public let prompts: [MCPPrompt]
     public let nextCursor: String?
-    public let metadata: [String: AnyCodable]?
 
     public init(
         prompts: [MCPPrompt],
@@ -108,16 +107,16 @@ public struct ListPromptsResult: MCPResponse, Sendable {
     ) {
         self.prompts = prompts
         self.nextCursor = nextCursor
-        self.metadata = metadata
+        self._meta = metadata
     }
 }
 
-public struct GetPromptRequest: MCPRequest, Sendable, Hashable {
+public struct GetPromptRequest: MCPRequest, Sendable {
     public static let method = "prompts/get"
     public typealias Response = GetPromptResult
 
     public struct Params: MCPRequestParams, Sendable {
-        public var meta: RequestMeta?
+        public var _meta: RequestMeta?
         public let name: String
         public let arguments: [String: String]?
     }
