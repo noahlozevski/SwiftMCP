@@ -1,12 +1,12 @@
 import Foundation
 
-public struct TextContent: Codable, Sendable {
+public struct TextContent: Codable, Sendable, Hashable {
     public let text: String
     public var type: String = "text"
     public let annotations: Annotations?
 }
 
-public struct ImageContent: Codable, Sendable {
+public struct ImageContent: Codable, Sendable, Hashable {
     public let data: String
     public let mimeType: String
     public var type: String = "image"
@@ -19,24 +19,24 @@ public enum Role: String, Codable, Sendable {
     case user
 }
 
-public struct Annotations: Codable, Sendable {
+public struct Annotations: Codable, Sendable, Hashable {
     public let audience: [Role]?
     public let priority: Double?
 }
-public struct TextResourceContents: Codable, Sendable {
+public struct TextResourceContents: Codable, Sendable, Hashable {
     public let uri: String
     public let mimeType: String?
     public let text: String
 }
 
-public struct BlobResourceContents: Codable, Sendable {
+public struct BlobResourceContents: Codable, Sendable, Hashable {
     public let blob: String
     public let uri: String
     public let mimeType: String?
 }
 
 /// EmbeddedResource can be either text or blob:
-public enum ResourceContentVariant: Codable, Sendable {
+public enum ResourceContentVariant: Codable, Sendable, Hashable {
     case text(TextResourceContents)
     case blob(BlobResourceContents)
 
@@ -71,7 +71,7 @@ public enum ResourceContentVariant: Codable, Sendable {
     }
 }
 
-public struct EmbeddedResourceContent: Codable, Sendable {
+public struct EmbeddedResourceContent: Codable, Sendable, Hashable {
     public var type: String = "resource"
     public let annotations: Annotations?
     public let resource: ResourceContentVariant

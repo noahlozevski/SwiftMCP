@@ -1,10 +1,12 @@
 import Foundation
 
-public struct MCPResource: Codable, Sendable {
+public struct MCPResource: Codable, Sendable, Identifiable, Hashable {
     public let uri: String
     public let name: String
     public let description: String?
     public let mimeType: String?
+
+    public var id: String { uri }
 }
 
 public struct ListResourcesRequest: MCPRequest {
@@ -47,13 +49,16 @@ public struct ListResourceTemplatesRequest: MCPRequest {
     }
 }
 
-public struct ResourceTemplate: Codable, Sendable {
+public struct ResourceTemplate: Codable, Sendable, Identifiable, Hashable {
     public let name: String
     public let uriTemplate: String
     public let description: String?
     public let mimeType: String?
     public let annotations: Annotations?
 
+    public var id: String {
+        name + uriTemplate
+    }
 }
 
 public struct ListResourceTemplatesResult: MCPResponse {

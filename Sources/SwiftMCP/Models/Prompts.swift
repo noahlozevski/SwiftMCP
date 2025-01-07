@@ -1,6 +1,8 @@
 import Foundation
 
-public struct MCPPrompt: Codable, Sendable {
+public struct MCPPrompt: Codable, Sendable, Hashable, Identifiable {
+    public var id: String { name + (arguments?.map(\.name) ?? []).joined() }
+
     public let name: String
     public let description: String?
     public let arguments: [PromptArgument]?
@@ -16,7 +18,7 @@ public struct MCPPrompt: Codable, Sendable {
     }
 }
 
-public struct PromptArgument: Codable, Sendable {
+public struct PromptArgument: Codable, Sendable, Hashable {
     public let name: String
     public let description: String?
     public let required: Bool?
@@ -32,32 +34,32 @@ public struct PromptArgument: Codable, Sendable {
     }
 }
 
-public struct PromptMessage: Codable, Sendable {
+public struct PromptMessage: Codable, Sendable, Hashable {
     public let role: Role
     public let content: PromptContent
 
-    public enum PromptContent: Codable, Sendable {
+    public enum PromptContent: Codable, Sendable, Hashable {
         case text(TextContent)
         case image(ImageContent)
         case resource(EmbeddedResourceContent)
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
-            if let textContent = try? container.decode(
-                TextContent.self
-            ), textContent.type == "text" {
+            if let textContent = try? container.decode(TextContent.self),
+                textContent.type == "text"
+            {
                 self = .text(textContent)
                 return
             }
-            if let imageContent = try? container.decode(
-                ImageContent.self
-            ), imageContent.type == "image" {
+            if let imageContent = try? container.decode(ImageContent.self),
+                imageContent.type == "image"
+            {
                 self = .image(imageContent)
                 return
             }
-            if let resourceContent = try? container.decode(
-                EmbeddedResourceContent.self
-            ), resourceContent.type == "resource" {
+            if let resourceContent = try? container.decode(EmbeddedResourceContent.self),
+                resourceContent.type == "resource"
+            {
                 self = .resource(resourceContent)
                 return
             }
@@ -74,12 +76,13 @@ public struct PromptMessage: Codable, Sendable {
         }
     }
 }
-public struct ListPromptsRequest: MCPRequest {
+
+public struct ListPromptsRequest: MCPRequest, Sendable, Hashable {
     public static let method = "prompts/list"
     public typealias Response = ListPromptsResult
 
-    public struct Params: MCPRequestParams {
-        public var _meta: RequestMeta?
+    public struct Params: MCPRequestParams, Sendable, Hashable {
+        public var meta: RequestMeta?
         public let cursor: String?
     }
 
@@ -90,10 +93,10 @@ public struct ListPromptsRequest: MCPRequest {
     }
 }
 
-public struct ListPromptsResult: MCPResponse {
+public struct ListPromptsResult: MCPResponse, Sendable {
     public typealias Request = ListPromptsRequest
 
-    public var _meta: [String: AnyCodable]?
+    public var meta: [String: AnyCodable]?
     public let prompts: [MCPPrompt]
     public let nextCursor: String?
     public let metadata: [String: AnyCodable]?
@@ -109,12 +112,12 @@ public struct ListPromptsResult: MCPResponse {
     }
 }
 
-public struct GetPromptRequest: MCPRequest {
+public struct GetPromptRequest: MCPRequest, Sendable, Hashable {
     public static let method = "prompts/get"
     public typealias Response = GetPromptResult
 
-    public struct Params: MCPRequestParams {
-        public var _meta: RequestMeta?
+    public struct Params: MCPRequestParams, Sendable {
+        public var meta: RequestMeta?
         public let name: String
         public let arguments: [String: String]?
     }
@@ -126,16 +129,10 @@ public struct GetPromptRequest: MCPRequest {
     }
 }
 
-public struct GetPromptResult: MCPResponse {
+public struct GetPromptResult: MCPResponse, Sendable {
     public typealias Request = GetPromptRequest
 
     public var _meta: [String: AnyCodable]?
     public let description: String?
     public let messages: [PromptMessage]
-
-    public struct PromptArgument: Codable {
-        public let name: String
-        public let description: String?
-        public let required: Bool?
-    }
 }
