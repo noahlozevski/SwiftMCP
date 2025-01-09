@@ -2,19 +2,37 @@ import Foundation
 @preconcurrency import JSONSchema
 
 public struct MCPTool: Codable, Sendable {
+    /// The name of the tool.
     public let name: String
-    public let description: String?
+
+    /// The description of the tool.
+    public var description: String?
+
+    /// The input schema for the tool.
     public let inputSchema: Schema
+
+    /// The connection ID associated with the tool.
+    public var connectionId: String?
+
+    public var id: String { name + (connectionId ?? "") }
+
+    public init(
+        name: String,
+        description: String? = nil,
+        inputSchema: Schema,
+        connectionId: String? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema
+        self.connectionId = connectionId
+    }
 }
 
 extension MCPTool: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(name)
     }
-}
-
-extension MCPTool: Identifiable {
-    public var id: String { name }
 }
 
 public struct CallToolRequest: MCPRequest {
