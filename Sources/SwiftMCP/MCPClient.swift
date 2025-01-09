@@ -444,9 +444,10 @@ extension MCPClient {
   }
 
   public func listTools(
+    cursor: String? = nil,
     progress: ProgressHandler.UpdateHandler? = nil
   ) async throws -> ListToolsResult {
-    try await send(ListToolsRequest(), progressHandler: progress)
+    try await send(ListToolsRequest(cursor: cursor), progressHandler: progress)
   }
 
   public func callTool(

@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import JSONSchema
 
-public struct MCPTool: Codable, Sendable {
+public struct MCPTool: Codable, Sendable, Identifiable {
     /// The name of the tool.
     public let name: String
 
