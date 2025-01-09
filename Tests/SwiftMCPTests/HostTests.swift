@@ -8,13 +8,13 @@ struct MCPHostTests {
   var configuration = MCPConfiguration(
     roots: .list([])
   )
-  
+
   var everythingTransport: MCPTransport {
     StdioTransport(
       command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"]
     )
   }
-  
+
   var memoryTransport: MCPTransport {
     StdioTransport(
       command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
@@ -33,7 +33,7 @@ struct MCPHostTests {
 
     await host.disconnect(connection.id)
     try await Task.sleep(for: .milliseconds(50))
-    
+
     let isConnected = connection.isConnected
 
     #expect(!isConnected)
@@ -102,15 +102,14 @@ struct MCPHostTests {
 
     var progressCalled = false
 
-    // Progress notifications (TODO)
-    let _ = try await connection.callTool(
+    _ = try await connection.callTool(
       "longRunningOperation",
       arguments: [
         "duration": 5,
         "step": 10,
       ]
     ) {
-      (current, total) in
+      (_, _) in
 
       progressCalled = true
     }
@@ -182,12 +181,14 @@ struct MCPHostTests {
     let host = MCPHost()
 
     // Initial state
-    #expect(host.connections.isEmpty)
+    var connections = await host.connections
+    #expect(connections.isEmpty)
 
     // Connect
     let connection = try await host.connect("test", transport: everythingTransport)
-    #expect(host.connections.count == 1)
-    #expect(host.connections["test"]?.id == "test")
+    connections = await host.connections
+    #expect(connections.count == 1)
+    #expect(connections["test"]?.id == "test")
     #expect(connection.status == .connected)
     #expect(connection.isConnected)
 
@@ -207,7 +208,8 @@ struct MCPHostTests {
 
     // Disconnect
     await host.disconnect(connection.id)
-    #expect(host.connections.isEmpty)
+    connections = await host.connections
+    #expect(connections.isEmpty)
     try await Task.sleep(for: .milliseconds(50))
     #expect(!connection.isConnected)
     #expect(connection.status == .disconnected)
@@ -223,11 +225,11 @@ struct MCPHostTests {
 
     async let task1 = conn1.refresh()
     async let task2 = conn2.refresh()
-    
-    let (_,_) = await (task1, task2)
+
+    let (_, _) = await (task1, task2)
 
     // Should aggregate all unique tools
-    let allTools = host.availableTools
+    var allTools = await host.availableTools
     #expect(allTools.count > 0)
     #expect(allTools.count >= conn1.tools.count)
     #expect(allTools.count >= conn2.tools.count)
@@ -235,7 +237,8 @@ struct MCPHostTests {
     // Tool list should update when connections refresh
     let initialCount = allTools.count
     await conn1.refreshTools()
-    #expect(host.availableTools.count >= initialCount)
+    allTools = await host.availableTools
+    #expect(allTools.count >= initialCount)
   }
 
   @Test("Host handles feature notifications")
@@ -270,7 +273,7 @@ struct MCPHostTests {
     var progressUpdates: [(Double, Double?)] = []
 
     // Long running operation with progress
-    let _ = try await connection.callTool(
+    _ = try await connection.callTool(
       "longRunningOperation",
       arguments: ["duration": 2, "steps": 4],
       progress: { progress, total in
@@ -294,10 +297,11 @@ struct MCPHostTests {
 
     do {
       _ = try await host.connect("test", transport: badTransport)
-      #expect(false, "Should have thrown")
+      Issue.record("Expected connection to fail")
     } catch {
       #expect(true)
-      #expect(host.connections.isEmpty)
+      let connections = await host.connections
+      #expect(connections.isEmpty)
     }
 
     // Test automatic state updates on connection failure
@@ -310,7 +314,7 @@ struct MCPHostTests {
 
     #expect(connection.status == .disconnected)
     #expect(!connection.isConnected)
-    #expect(host.failedConnections.isEmpty)
+    #expect((await host.failedConnections).isEmpty)
   }
 
   @Test("Host handles client capability checks")
@@ -319,11 +323,11 @@ struct MCPHostTests {
     let connection = try await host.connect("test", transport: everythingTransport)
 
     // Verify capability inference
-    let toolConns = host.connections(supporting: .tools)
+    let toolConns = await host.connections(supporting: .tools)
     #expect(!toolConns.isEmpty)
     #expect(toolConns.contains(connection))
 
-    let resourceConns = host.connections(supporting: .resources)
+    let resourceConns = await host.connections(supporting: .resources)
     #expect(!resourceConns.isEmpty)
     #expect(resourceConns.contains(connection))
 
@@ -350,19 +354,21 @@ struct MCPHostTests {
     let connection = try await host.connect("test", transport: everythingTransport)
 
     // Initially active
-    #expect(host.inactiveConnections(timeout: 60).isEmpty)
+    var inactive = await host.inactiveConnections(timeout: 60)
+    #expect(inactive.isEmpty)
 
     // Force inactivity
     let oldActivity = connection.lastActivity
     try await Task.sleep(for: .seconds(2))
 
-    let inactive = host.inactiveConnections(timeout: 1)
+    inactive = await host.inactiveConnections(timeout: 1)
     #expect(!inactive.isEmpty)
     #expect(inactive.first?.lastActivity == oldActivity)
 
     // Activity updates on operations
     await connection.refreshTools()
+    inactive = await host.inactiveConnections(timeout: 1)
     #expect(connection.lastActivity > oldActivity)
-    #expect(host.inactiveConnections(timeout: 1).isEmpty)
+    #expect(inactive.isEmpty)
   }
 }

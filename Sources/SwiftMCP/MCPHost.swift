@@ -5,15 +5,17 @@ import OSLog
 
 /// The primary interface for interacting with MCP servers
 @Observable public final class MCPHost {
-  // Public state
-  public private(set) var connections: [String: ConnectionState] = [:]
+  public var connections: [String: ConnectionState] {
+    get async { await state.connections }
+  }
 
   // Configuration
   private var configuration: MCPConfiguration
-  private var notificationTasks: [String: Task<Void, Never>] = [:]
+  private let state: MCPHostState
 
   public init(config: MCPConfiguration = .init()) {
     self.configuration = config
+    self.state = MCPHostState()
   }
 
   // MARK: - Connection Management
@@ -44,51 +46,63 @@ import OSLog
       capabilities: sessionInfo.capabilities
     )
 
-    notificationTasks[id] = Task { [weak self] in
+    let task = Task { [weak self] in
       for await notification in client.notifications {
         await self?.handleNotification(notification, for: state)
       }
     }
 
-    connections[id] = state
+    await self.state.addConnection(id: id, state: state, task: task)
     return state
   }
 
   public func disconnect(_ id: String) async {
-    guard let state = connections[id] else { return }
+    guard let state = await self.state.connection(for: id) else { return }
     await state.client.stop()
-    connections[id] = nil
-    notificationTasks[id] = nil
+    await self.state.removeConnection(id: id)
   }
 
   // MARK: - Capability Management
 
   /// Find all available tools across connections
   public var availableTools: [MCPTool] {
-    Array(Set(connections.values.flatMap { $0.tools }))
+    get async {
+      let connections = await state.connections
+      return Array(Set(connections.values.flatMap { $0.tools }))
+    }
   }
 
   /// Find connections supporting specific capabilities
-  public func connections(supporting feature: ServerCapabilities.Features) -> [ConnectionState] {
-    connections.values.filter { $0.capabilities.supports(feature) }
+  public func connections(
+    supporting feature: ServerCapabilities.Features
+  ) async -> [ConnectionState] {
+    let connections = await state.connections
+    return connections.values.filter { $0.capabilities.supports(feature) }
   }
 
   // MARK: - Health Monitoring
 
   /// Get connections that haven't had activity within timeout
-  public func inactiveConnections(timeout: TimeInterval) -> [ConnectionState] {
+  public func inactiveConnections(timeout: TimeInterval) async -> [ConnectionState] {
     let cutoff = Date().addingTimeInterval(-timeout)
+    let connections = await state.connections
     return connections.values.filter { $0.lastActivity < cutoff }
   }
 
   /// Check if any connections are in a failed state
   public var hasFailedConnections: Bool {
-    connections.values.contains { $0.status == .failed }
+    get async {
+      let connections = await state.connections
+      return connections.values.contains { $0.status == .failed }
+    }
   }
 
   /// Get all failed connections
   public var failedConnections: [ConnectionState] {
-    connections.values.filter { $0.status == .failed }
+    get async {
+      let connections = await state.connections
+      return connections.values.filter { $0.status == .failed }
+    }
   }
 
   // MARK: - Private
@@ -108,6 +122,27 @@ import OSLog
       await state.refreshResources()
     default:
       break
+    }
+  }
+}
+
+extension MCPHost {
+  actor MCPHostState {
+    var connections: [String: ConnectionState] = [:]
+    var notificationTasks: [String: Task<Void, Never>] = [:]
+
+    func connection(for id: String) -> ConnectionState? {
+      connections[id]
+    }
+
+    func addConnection(id: String, state: ConnectionState, task: Task<Void, Never>) {
+      connections[id] = state
+      notificationTasks[id] = task
+    }
+
+    func removeConnection(id: String) {
+      connections[id] = nil
+      notificationTasks[id] = nil
     }
   }
 }
