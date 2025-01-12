@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import JSONSchema
 
 public struct MCPTool: Codable, Sendable, Identifiable {
+    public typealias ToolInputSchema = JSONSchema.Schema
     /// The name of the tool.
     public let name: String
 
@@ -9,7 +10,7 @@ public struct MCPTool: Codable, Sendable, Identifiable {
     public var description: String?
 
     /// The input schema for the tool.
-    public let inputSchema: Schema
+    public let inputSchema: ToolInputSchema
 
     /// The connection ID associated with the tool.
     public var connectionId: String?

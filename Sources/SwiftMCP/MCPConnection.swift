@@ -27,7 +27,7 @@ import Foundation
   // MARK: - Status
 
   public private(set) var status: ConnectionStatus = .connected
-  public var isConnected: Bool { status == .connected }
+  public var isConnected: Bool { status != .disconnected }
 
   init(
     id: String,
