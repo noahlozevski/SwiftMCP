@@ -121,9 +121,6 @@ public enum TransportState {
     /// Transport is connected and ready
     case connected
 
-    /// Transport is temporarily paused
-    case suspended
-
     /// Transport has permanently failed
     case failed(Error)
 }
@@ -134,7 +131,6 @@ extension TransportState: CustomStringConvertible, CustomDebugStringConvertible 
         case .disconnected: return "disconnected"
         case .connecting: return "connecting"
         case .connected: return "connected"
-        case .suspended: return "suspended"
         case .failed(let error): return "failed: \(error)"
         }
     }
@@ -144,7 +140,6 @@ extension TransportState: CustomStringConvertible, CustomDebugStringConvertible 
         case .disconnected: return "Transport is disconnected"
         case .connecting: return "Transport is connecting"
         case .connected: return "Transport is connected"
-        case .suspended: return "Transport is suspended"
         case .failed(let error): return "Transport has failed: \(error)"
         }
     }
@@ -156,8 +151,7 @@ extension TransportState: Equatable {
         case (.disconnected, .disconnected),
             (.connecting, .connecting),
             (.connected, .connected),
-            (.failed, .failed),
-            (.suspended, .suspended):
+            (.failed, .failed):
             return true
         default:
             return false
