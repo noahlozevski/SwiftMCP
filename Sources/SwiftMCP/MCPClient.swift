@@ -72,13 +72,14 @@ public actor MCPClient: MCPEndpointProtocol {
     self.transport = transport
     state = .connecting
 
+    try await transport.start()
+
     // Start message processing
     messageTask = Task {
-      guard let transport = self.transport else {
-        throw MCPError.internalError("Transport not available")
-      }
-      try await transport.start()
       do {
+        guard let transport = self.transport else {
+          throw MCPError.internalError("Transport not available")
+        }
         let messageStream = await transport.messages()
         for try await data in messageStream {
           if Task.isCancelled { break }

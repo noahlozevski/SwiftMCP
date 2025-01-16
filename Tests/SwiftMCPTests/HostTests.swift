@@ -3,28 +3,32 @@ import Testing
 
 @testable import SwiftMCP
 
+var everythingStdio: MCPTransport {
+  StdioTransport(
+    command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"]
+  )
+}
+
+var memoryTransport: MCPTransport {
+  StdioTransport(
+    command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
+}
+
+var everythingSSE: MCPTransport {
+  SSEClientTransport(url: .init(string: "http://localhost:8000/sse")!)
+}
+
 @Suite("MCP Hosts")
 struct MCPHostTests {
   var configuration = MCPConfiguration(
     roots: .list([])
   )
 
-  var everythingTransport: MCPTransport {
-    StdioTransport(
-      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"]
-    )
-  }
-
-  var memoryTransport: MCPTransport {
-    StdioTransport(
-      command: "npx", arguments: ["-y", "@modelcontextprotocol/server-memory"])
-  }
-
-  @Test
-  func testHostConnection() async throws {
+  @Test(.serialized, arguments: [everythingStdio, everythingSSE])
+  func testHostConnection(_ transport: MCPTransport) async throws {
     let host = MCPHost(config: configuration)
 
-    let connection = try await host.connect("memory", transport: memoryTransport)
+    let connection = try await host.connect("memory", transport: transport)
 
     await connection.refresh()
     let tools = connection.tools
@@ -32,18 +36,18 @@ struct MCPHostTests {
     #expect(tools.count > 0)
 
     await host.disconnect(connection.id)
-    try await Task.sleep(for: .milliseconds(50))
+    try await Task.sleep(for: .milliseconds(500))
 
     let isConnected = connection.isConnected
 
     #expect(!isConnected)
   }
 
-  @Test
-  func testTools() async throws {
+  @Test(.serialized, arguments: [everythingStdio, everythingSSE])
+  func testTools(_ transport: MCPTransport) async throws {
     let host = MCPHost(config: configuration)
 
-    let connection = try await host.connect("everything", transport: everythingTransport)
+    let connection = try await host.connect("everything", transport: transport)
 
     await connection.refreshTools()
 
@@ -89,11 +93,11 @@ struct MCPHostTests {
     #expect(imageMessage.data.count > 0)
   }
 
-  @Test
-  func testToolsWithProgress() async throws {
+  @Test(.serialized, arguments: [everythingStdio, everythingSSE])
+  func testToolsWithProgress(_ transport: MCPTransport) async throws {
     let host = MCPHost(config: configuration)
 
-    let connection = try await host.connect("everything", transport: everythingTransport)
+    let connection = try await host.connect("everything", transport: transport)
 
     await connection.refreshTools()
     let tools = connection.tools
@@ -105,7 +109,7 @@ struct MCPHostTests {
     _ = try await connection.callTool(
       "longRunningOperation",
       arguments: [
-        "duration": 5,
+        "duration": 3,
         "step": 10,
       ]
     ) {
@@ -118,8 +122,8 @@ struct MCPHostTests {
     #expect(progressCalled)
   }
 
-  @Test
-  func testSampling() async throws {
+  @Test(.serialized, arguments: [everythingStdio, everythingSSE])
+  func testSampling(_ transport: MCPTransport) async throws {
     let config = MCPConfiguration(
       roots: .list([]),
       sampling: .init(handler: { _ in
@@ -130,7 +134,7 @@ struct MCPHostTests {
     )
     let host = MCPHost(config: config)
 
-    let connection = try await host.connect("everything", transport: everythingTransport)
+    let connection = try await host.connect("everything", transport: transport)
 
     let sampleResponse = try await connection.callTool(
       "sampleLLM", arguments: ["prompt": "Hello, World!"])
@@ -138,11 +142,11 @@ struct MCPHostTests {
     #expect(sampleResponse.content.count > 0)
   }
 
-  @Test
-  func testEverythingServerResources() async throws {
+  @Test(.serialized, arguments: [everythingStdio, everythingSSE])
+  func testEverythingServerResources(_ transport: MCPTransport) async throws {
     let host = MCPHost()
 
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: transport)
 
     await connection.refreshResources()
 
@@ -155,11 +159,11 @@ struct MCPHostTests {
     #expect(binaryResource.contents.count > 0)
   }
 
-  @Test
-  func testPrompts() async throws {
+  @Test(arguments: [everythingStdio, everythingSSE])
+  func testPrompts(_ transport: MCPTransport) async throws {
     let host = MCPHost()
 
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: transport)
 
     await connection.refreshPrompts()
 
@@ -185,7 +189,7 @@ struct MCPHostTests {
     #expect(connections.isEmpty)
 
     // Connect
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
     connections = await host.connections
     #expect(connections.count == 1)
     #expect(connections["test"]?.id == "test")
@@ -220,7 +224,7 @@ struct MCPHostTests {
     let host = MCPHost()
 
     // Connect multiple servers
-    let conn1 = try await host.connect("test1", transport: everythingTransport)
+    let conn1 = try await host.connect("test1", transport: everythingStdio)
     let conn2 = try await host.connect("test2", transport: memoryTransport)
 
     async let task1 = conn1.refresh()
@@ -244,7 +248,7 @@ struct MCPHostTests {
   @Test("Host handles feature notifications")
   func testFeatureNotifications() async throws {
     let host = MCPHost()
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
 
     // Initial refresh
     await connection.refresh()
@@ -267,7 +271,7 @@ struct MCPHostTests {
   @Test("Host manages progress updates")
   func testProgressHandling() async throws {
     let host = MCPHost()
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
 
     await connection.refreshTools()
     var progressUpdates: [(Double, Double?)] = []
@@ -305,7 +309,7 @@ struct MCPHostTests {
     }
 
     // Test automatic state updates on connection failure
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
     await connection.refresh()
 
     // Force connection failure
@@ -320,7 +324,7 @@ struct MCPHostTests {
   @Test("Host handles client capability checks")
   func testCapabilityChecks() async throws {
     let host = MCPHost()
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
 
     // Verify capability inference
     let toolConns = await host.connections(supporting: .tools)
@@ -351,7 +355,7 @@ struct MCPHostTests {
   @Test("Host monitors connection health")
   func testHealthMonitoring() async throws {
     let host = MCPHost()
-    let connection = try await host.connect("test", transport: everythingTransport)
+    let connection = try await host.connect("test", transport: everythingStdio)
 
     // Initially active
     var inactive = await host.inactiveConnections(timeout: 60)

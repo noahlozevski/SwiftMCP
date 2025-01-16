@@ -35,11 +35,12 @@ import OSLog
 
     try await client.start(transport)
 
-    guard case .running(let sessionInfo) = await client.state else {
-      throw MCPError.internalError("Expected running state")
+    let state = await client.state
+    guard case .running(let sessionInfo) = state else {
+      throw MCPError.internalError("Expected running state.  Current state \(state)")
     }
 
-    let state = ConnectionState(
+    let connectionState = ConnectionState(
       id: id,
       client: client,
       serverInfo: sessionInfo.serverInfo,
@@ -48,12 +49,12 @@ import OSLog
 
     let task = Task { [weak self] in
       for await notification in client.notifications {
-        await self?.handleNotification(notification, for: state)
+        await self?.handleNotification(notification, for: connectionState)
       }
     }
 
-    await self.state.addConnection(id: id, state: state, task: task)
-    return state
+    await self.state.addConnection(id: id, state: connectionState, task: task)
+    return connectionState
   }
 
   public func disconnect(_ id: String) async {
