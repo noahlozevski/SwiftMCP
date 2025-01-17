@@ -52,7 +52,7 @@ public actor SSEClientTransport: MCPTransport {
         // For now, the origin of the SSE url MUST match the origin of the POST url
         sseURL: URL,
         configuration: TransportConfiguration = .default,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .sseSession()
     ) {
         // TODO: assert URL is remote
         // TODO: assert we can identify the base URL
@@ -137,13 +137,15 @@ public actor SSEClientTransport: MCPTransport {
         if data.count > configuration.maxMessageSize {
             throw TransportError.messageTooLarge(data.count)
         }
-
+        
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = data
 
-        // Timeout logic
+        let sessionCookie = "browser%2Fnoahlozevski%2FqtkLZunfUWbKHSqIyFkIPvLAnD9gWQDM.pVjbxJwtdzU%2FkCi2oYZ0MVmM9JB43apvLHMbBvRn1%2B8"
+        request.addValue("sessionId=\(sessionCookie)", forHTTPHeaderField: "Cookie")
+
         let actualTimeout = timeout ?? configuration.sendTimeout
         request.timeoutInterval = actualTimeout
 
@@ -164,7 +166,16 @@ public actor SSEClientTransport: MCPTransport {
             guard let self else { return }
 
             do {
-                let (asyncBytes, response) = try await self.urlSession.bytes(from: self.sseURL)
+                let (asyncBytes, response) = try await self.urlSession.bytes(for: {
+                    var request = URLRequest(url: self.sseURL)
+                    request.httpMethod = "GET"
+
+                    // Add the hardcoded cookie to the header
+                    let sessionCookie = "browser%2Fnoahlozevski%2FqtkLZunfUWbKHSqIyFkIPvLAnD9gWQDM.pVjbxJwtdzU%2FkCi2oYZ0MVmM9JB43apvLHMbBvRn1%2B8"
+                    request.addValue("sessionId=\(sessionCookie)", forHTTPHeaderField: "Cookie")
+
+                    return request
+                }())
 
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode)
@@ -177,8 +188,16 @@ public actor SSEClientTransport: MCPTransport {
 
                 let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
                 guard contentType.contains("text/event-stream") else {
-                    throw TransportError.invalidState("Not an SSE response")
+                    throw TransportError.invalidState("bad content type headers")
                 }
+                let cacheControl = httpResponse.value(forHTTPHeaderField: "Cache-Control") ?? ""
+                guard cacheControl.contains("no-cache") else {
+                    throw TransportError.invalidState("bad cache headers")
+                }
+//                let connection = httpResponse.value(forHTTPHeaderField: "Connection") ?? ""
+//                guard connection.contains("keep-alive") else {
+//                    throw TransportError.invalidState("bad connection header")
+//                }
 
                 // we are connected now that we have a byte stream with no other response code errors
                 logger.info("Connected to downchannel")
@@ -224,7 +243,7 @@ public actor SSEClientTransport: MCPTransport {
                         }
                     }
                     // unhandled event / message payload
-                    throw TransportError.invalidMessage("Unhandled line of byte stream in SSEClientTransport. Line must start 'data:' or 'event:' . Line was: \(line)")
+//                    throw TransportError.invalidMessage("Unhandled line of byte stream in SSEClientTransport. Line must start 'data:' or 'event:' . Line was: \(line)")
                 }
                 logger.info("SSE downchannel closed")
                 continuation.finish()
@@ -259,15 +278,13 @@ public actor SSEClientTransport: MCPTransport {
 
 }
 
-//
-//fileprivate extension URL {
-//    public var originURL: URL? {
-//        self.base
-//            guard let base = self.baseURL else {
-//                // TODO: update error
-//                throw TransportError.invalidState("unable to get base url")
-//            }
-//            return base
-//        }
-//    }
-//}
+
+public extension URLSession {
+    public static func sseSession() -> URLSession {
+        let session = URLSession(configuration: .default)
+        session.configuration.timeoutIntervalForRequest = .infinity
+        session.configuration.timeoutIntervalForResource = .infinity
+        session.configuration.waitsForConnectivity = true
+        return session
+    }
+}

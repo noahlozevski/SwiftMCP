@@ -233,7 +233,7 @@ extension RetryableTransport {
 
                 // Calculate delay for next attempt
                 let delay = configuration.retryPolicy.delay(forAttempt: attempt)
-                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000_000))
 
                 attempt += 1
             }

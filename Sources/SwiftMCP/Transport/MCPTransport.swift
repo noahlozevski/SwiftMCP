@@ -32,7 +32,7 @@ extension MCPTransport {
         }
 
         let timeout = timeout ?? configuration.sendTimeout
-        try await with(timeout: .microseconds(Int64(timeout * 1_000_000))) { [weak self] in
+        try await with(timeout: .microseconds(Int64(timeout * 1_000_000_000))) { [weak self] in
             try await self?.send(data, timeout: nil)
         }
     }
