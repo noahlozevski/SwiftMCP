@@ -2,14 +2,28 @@ import os // for logger
 import Foundation
 
 public actor SSEClientTransport: MCPTransport {
+
     public let configuration: TransportConfiguration
+
+    private var _state: TransportState = .disconnected
     /// The current state of the transport
-    public private(set) var state: TransportState = .disconnected
+    public private(set) var state: TransportState {
+        get {
+            return _state
+        }
+        set {
+            _state = newValue
+            if let transportStateContinuation {
+                transportStateContinuation.yield(newValue)
+            }
+        }
+    }
+
     /// The endpoint we receive via the `endpoint` SSE event. Once known, we POST to it for sending messages.
     public private(set) var postEndpoint: URL?
 
     /// The base URL for the SSE connection (GET) request.
-    private let url: URL
+    private let sseURL: URL
 
     /// Used for parsing SSE events
     private var currentEvent: String?
@@ -17,8 +31,11 @@ public actor SSEClientTransport: MCPTransport {
     /// Our internal `EventSource` task
     private var task: Task<Void, Never>?
 
-    /// The continuation for the AsyncThrowingStream
+    /// The continuation for the messages stream
     private var messagesContinuation: AsyncThrowingStream<Data, Error>.Continuation?
+
+    /// The continuation for the transport state event stream
+    private var transportStateContinuation: AsyncStream<TransportState>.Continuation?
 
     /// A unique session identifier
     private let sessionId: String
@@ -29,11 +46,17 @@ public actor SSEClientTransport: MCPTransport {
     private let logger: Logger
 
     public init(
-        url: URL,
+        // ex: http://localhost:3000/sse
+        // This is the exact url used to setup the down channel
+        // The sending / POST url will be received during client capability discovery
+        // For now, the origin of the SSE url MUST match the origin of the POST url
+        sseURL: URL,
         configuration: TransportConfiguration = .default,
         urlSession: URLSession = .shared
     ) {
-        self.url = url
+        // TODO: assert URL is remote
+        // TODO: assert we can identify the base URL
+        self.sseURL = sseURL
         self.configuration = configuration
         self.urlSession = urlSession
         self.sessionId = UUID().uuidString
@@ -65,6 +88,12 @@ public actor SSEClientTransport: MCPTransport {
                     await self?.stop()
                 }
             }
+        }
+    }
+
+    public func transportState() -> AsyncStream<TransportState> {
+        AsyncStream { continuation in
+            self.transportStateContinuation = continuation
         }
     }
 
@@ -135,7 +164,7 @@ public actor SSEClientTransport: MCPTransport {
             guard let self else { return }
 
             do {
-                let (asyncBytes, response) = try await self.urlSession.bytes(from: self.url)
+                let (asyncBytes, response) = try await self.urlSession.bytes(from: self.sseURL)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode)
@@ -163,7 +192,6 @@ public actor SSEClientTransport: MCPTransport {
                 // No whitespace rules are technically enforced, but we trim for whitespace on the endpoint event
 
                 for try await line in asyncBytes.lines {
-                    print("NOAH : \(line)")
                     let startingChars = line.prefix(6).lowercased()
 
                     if startingChars.starts(with: "event:") {
@@ -177,12 +205,16 @@ public actor SSEClientTransport: MCPTransport {
                         let rawData = String(line.dropFirst("data:".count))
                         logger.debug("Received SSE data: \(rawData)")
                         if await self.currentEvent == "endpoint" {
-                            let trimmedEndpoint = rawData.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if let newEndpoint = URL(string: trimmedEndpoint) {
-                                await self.setPostEndpoint(newEndpoint)
+                            // ex: /message?sessionId=252e9336-68c5-49d1-be3d-8f7b2fa3b0df or http://localhost/message?sessionId=....
+                            let endpointOrPath = rawData.trimmingCharacters(in: .whitespacesAndNewlines)
+                            // if the path is a resource, then append to current endpoint origin
+                            // Otherwise, parse as a URL and assert the origin matches the origin of self.url
+                            if let newEndpoint = URL(string: endpointOrPath, relativeTo: self.sseURL) {
+                                try await self.setPostEndpoint(newEndpoint)
                                 continue
                             }
                         } else {
+                            // we received "data: "
                             let trimmed = rawData.trimmingCharacters(in: .whitespaces)
                             if let data = trimmed.data(using: .utf8) {
                                 logger.debug("Yielding SSE data: \(data)")
@@ -213,9 +245,29 @@ public actor SSEClientTransport: MCPTransport {
         self.state = state
     }
 
-    private func setPostEndpoint(_ endpoint: URL) {
+    /// Throws if the endpoint passed doesnt match the origin / scheme of the sseURL
+    private func setPostEndpoint(_ endpoint: URL) throws {
+        let ssePath = URL(string:"/", relativeTo: self.sseURL)
+        let endpointPath = URL(string:"/", relativeTo: endpoint)
+        if ssePath?.absoluteString != endpointPath?.absoluteString {
+            // TODO: better error
+            throw TransportError.invalidState("origin of SSE url \(ssePath?.absoluteString) and POST url \(endpointPath?.absoluteString) dont match")
+        }
         logger.debug("[setPostEndpoint] setting postEndpoint URL \(endpoint)")
         self.postEndpoint = endpoint
     }
 
 }
+
+//
+//fileprivate extension URL {
+//    public var originURL: URL? {
+//        self.base
+//            guard let base = self.baseURL else {
+//                // TODO: update error
+//                throw TransportError.invalidState("unable to get base url")
+//            }
+//            return base
+//        }
+//    }
+//}

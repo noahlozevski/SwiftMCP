@@ -12,6 +12,9 @@ public protocol MCPTransport: Actor {
     /// If the transport is not started, it will be started automatically
     func messages() -> AsyncThrowingStream<Data, Error>
 
+    /// Creates an async stream of transport state events
+    func transportState() -> AsyncStream<TransportState>
+
     /// Start the transport
     func start() async throws
 
@@ -31,6 +34,18 @@ extension MCPTransport {
         let timeout = timeout ?? configuration.sendTimeout
         try await with(timeout: .microseconds(Int64(timeout * 1_000_000))) { [weak self] in
             try await self?.send(data, timeout: nil)
+        }
+    }
+
+    /// Resolves when the transport state == the expected state
+    public func waitFor(state expected: TransportState) async throws {
+        if self.state == expected {
+            return
+        }
+        for try await current in self.transportState() {
+            if expected == current {
+                return
+            }
         }
     }
 }

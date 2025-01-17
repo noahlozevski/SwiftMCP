@@ -3,7 +3,7 @@ import Testing
 
 @testable import SwiftMCP
 
-@Suite("MCP Hosts")
+@Suite("MCP Hosts", .serialized)
 struct MCPHostTests {
   var configuration = MCPConfiguration(
     roots: .list([])

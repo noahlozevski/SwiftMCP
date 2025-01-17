@@ -2,6 +2,9 @@ import Foundation
 
 /// Configuration for transport connection behavior
 public struct TransportConfiguration {
+    /// Auto-reconnects upon disconnect of transport
+    public let autoReconnect: Bool
+
     /// Maximum time to wait for connection in seconds
     public let connectTimeout: TimeInterval
 
@@ -18,12 +21,14 @@ public struct TransportConfiguration {
         connectTimeout: TimeInterval = 30.0,
         sendTimeout: TimeInterval = 30.0,
         maxMessageSize: Int = 1024 * 1024 * 4,  // 4MB default
-        retryPolicy: TransportRetryPolicy = .default
+        retryPolicy: TransportRetryPolicy = .default,
+        autoReconnect: Bool = true
     ) {
         self.connectTimeout = connectTimeout
         self.sendTimeout = sendTimeout
         self.maxMessageSize = maxMessageSize
         self.retryPolicy = retryPolicy
+        self.autoReconnect = autoReconnect
     }
 
     public static let `default` = TransportConfiguration()
