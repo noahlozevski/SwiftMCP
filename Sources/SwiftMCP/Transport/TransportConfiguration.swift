@@ -160,44 +160,6 @@ extension TransportState: Equatable {
 
 }
 
-/// Core transport errors
-public enum TransportError: Error, CustomStringConvertible {
-    /// Timeout waiting for operation
-    case timeout(operation: String)
-
-    /// Invalid message format
-    case invalidMessage(String)
-
-    /// Connection failed
-    case connectionFailed(Error)
-
-    /// Operation failed
-    case operationFailed(Error)
-
-    /// Transport is in wrong state for operation
-    case invalidState(String)
-
-    /// Message exceeds size limit
-    case messageTooLarge(Int)
-
-    public var description: String {
-        switch self {
-        case .timeout(let operation):
-            return "Timeout waiting for operation: \(operation)"
-        case .invalidMessage(let message):
-            return "Invalid message format: \(message)"
-        case .connectionFailed(let error):
-            return "Connection failed: \(error)"
-        case .operationFailed(let error):
-            return "Operation failed: \(error)"
-        case .invalidState(let message):
-            return "Invalid state: \(message)"
-        case .messageTooLarge(let size):
-            return "Message exceeds size limit: \(size)"
-        }
-    }
-}
-
 /// Protocol providing retry capability to transports
 public protocol RetryableTransport: MCPTransport {
     /// Perform operation with retry

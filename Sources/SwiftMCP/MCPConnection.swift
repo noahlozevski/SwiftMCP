@@ -113,6 +113,13 @@ import Foundation
     }
   }
 
+  func reconnect() async throws {
+    guard !isConnected else { return }
+
+    reconnectCount += 1
+    try await client.reconnect()
+  }
+
   // MARK: - Tools API
 
   public func callTool(
